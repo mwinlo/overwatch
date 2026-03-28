@@ -1,5 +1,340 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><title>Overwatch</title></head>
-<body><h1>Overwatch</h1></body>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Overwatch</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0e17;
+      --surface: #111827;
+      --border: rgba(255,255,255,0.06);
+      --text: #e2e8f0;
+      --text-secondary: #64748b;
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --blue: #3b82f6;
+      --kill-red: #dc2626;
+      --font-mono: 'JetBrains Mono', monospace;
+      --font-sans: 'IBM Plex Sans', sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+    }
+
+    /* Reconnection Banner */
+    #reconnect-banner {
+      display: none;
+      background: var(--red);
+      color: white;
+      text-align: center;
+      padding: 8px;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    #reconnect-banner.visible { display: block; }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .header-title {
+      font-family: var(--font-mono);
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 2px;
+    }
+    .pulse-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+    .pulse-dot.disconnected { background: var(--text-secondary); animation: none; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .header-right {
+      display: flex; align-items: center; gap: 16px;
+      font-size: 13px; color: var(--text-secondary); font-family: var(--font-mono);
+    }
+    .session-badge {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 4px 12px;
+      font-weight: 600; color: var(--text);
+    }
+
+    /* System Health Strip */
+    .health-strip {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 16px; padding: 20px 24px;
+    }
+    @media (max-width: 900px) { .health-strip { grid-template-columns: repeat(2, 1fr); } }
+    .health-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px 20px;
+    }
+    .health-card-label {
+      font-size: 12px; font-weight: 500; color: var(--text-secondary);
+      text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;
+    }
+    .health-card-value {
+      font-family: var(--font-mono); font-size: 28px; font-weight: 700; margin-bottom: 4px;
+    }
+    .health-card-sub {
+      font-size: 13px; color: var(--text-secondary); font-family: var(--font-mono);
+    }
+    .progress-bar {
+      height: 4px; background: rgba(255,255,255,0.08);
+      border-radius: 2px; margin-top: 10px; overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; border-radius: 2px;
+      transition: width 0.5s ease, background 0.5s ease;
+    }
+
+    /* Charts */
+    .charts-row {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 16px; padding: 0 24px 20px;
+    }
+    @media (max-width: 900px) { .charts-row { grid-template-columns: 1fr; } }
+    .chart-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px 20px;
+    }
+    .chart-card h3 {
+      font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+      color: var(--text-secondary); text-transform: uppercase;
+      letter-spacing: 1px; margin-bottom: 12px;
+    }
+
+    /* Session Cards */
+    .sessions-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 16px; padding: 0 24px 20px;
+    }
+    .session-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 20px; transition: opacity 0.5s ease;
+    }
+    .session-card.killing { opacity: 0.3; }
+    .session-header {
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;
+    }
+    .session-label {
+      font-family: var(--font-mono); font-weight: 700; font-size: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .session-pid { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); }
+    .session-path {
+      font-size: 12px; color: var(--text-secondary);
+      margin-bottom: 16px; word-break: break-all;
+    }
+    .session-metrics {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 8px 24px; margin-bottom: 16px;
+    }
+    .metric { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+    .metric-label { color: var(--text-secondary); }
+    .metric-value { font-family: var(--font-mono); font-weight: 600; }
+    .metric-bar { grid-column: 1 / -1; }
+    .mini-bar {
+      height: 3px; background: rgba(255,255,255,0.08);
+      border-radius: 2px; margin-top: 4px; overflow: hidden;
+    }
+    .mini-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+    .session-tokens {
+      font-size: 12px; color: var(--text-secondary);
+      font-family: var(--font-mono); margin-bottom: 16px; line-height: 1.6;
+    }
+    .kill-btn {
+      background: var(--kill-red); color: white; border: none;
+      border-radius: 6px; padding: 8px 16px;
+      font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+      cursor: pointer; float: right; transition: box-shadow 0.2s ease;
+    }
+    .kill-btn:hover { box-shadow: 0 0 16px rgba(220, 38, 38, 0.4); }
+    .kill-btn.confirming { background: #991b1b; }
+
+    /* Empty State */
+    .empty-state { text-align: center; padding: 80px 24px; color: var(--text-secondary); }
+    .empty-state p { font-size: 16px; margin-bottom: 8px; }
+    .empty-state code {
+      font-family: var(--font-mono); background: var(--surface);
+      padding: 2px 8px; border-radius: 4px;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center; padding: 16px;
+      font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono);
+    }
+  </style>
+</head>
+<body>
+  <div id="reconnect-banner">Connection lost - reconnecting...</div>
+
+  <header class="header">
+    <div class="header-left">
+      <div class="pulse-dot" id="pulse-dot"></div>
+      <span class="header-title">OVERWATCH</span>
+    </div>
+    <div class="header-right">
+      <span id="last-updated">Connecting...</span>
+      <span class="session-badge" id="session-count">0 sessions</span>
+    </div>
+  </header>
+
+  <section class="health-strip">
+    <div class="health-card">
+      <div class="health-card-label">RAM Usage</div>
+      <div class="health-card-value" id="ram-value">&mdash;</div>
+      <div class="health-card-sub" id="ram-sub"></div>
+      <div class="progress-bar"><div class="progress-fill" id="ram-bar"></div></div>
+    </div>
+    <div class="health-card">
+      <div class="health-card-label">Claude RAM</div>
+      <div class="health-card-value" id="claude-ram-value">&mdash;</div>
+      <div class="health-card-sub" id="claude-ram-sub"></div>
+    </div>
+    <div class="health-card">
+      <div class="health-card-label">CPU Load</div>
+      <div class="health-card-value" id="cpu-value">&mdash;</div>
+      <div class="health-card-sub" id="cpu-sub"></div>
+    </div>
+    <div class="health-card">
+      <div class="health-card-label">Sessions</div>
+      <div class="health-card-value" id="sessions-value">&mdash;</div>
+      <div class="health-card-sub">active</div>
+    </div>
+  </section>
+
+  <section class="charts-row">
+    <div class="chart-card">
+      <h3>Memory Over Time</h3>
+      <canvas id="memory-chart" height="200"></canvas>
+    </div>
+    <div class="chart-card">
+      <h3>CPU Over Time</h3>
+      <canvas id="cpu-chart" height="200"></canvas>
+    </div>
+  </section>
+
+  <section class="sessions-grid" id="sessions-grid"></section>
+
+  <div class="empty-state" id="empty-state" style="display:none">
+    <p>No Claude Code sessions detected.</p>
+    <p>Start one in a terminal with <code>claude</code></p>
+  </div>
+
+  <footer class="footer">
+    Polling every 3s &bull; Storing 20min history &bull; Port 4040
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    // ============================================================
+    // STATE
+    // ============================================================
+    var ws = null;
+    var reconnectTimer = null;
+
+    // ============================================================
+    // WEBSOCKET CONNECTION
+    // ============================================================
+    function connect() {
+      var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(protocol + '//' + location.host);
+
+      ws.onopen = function() {
+        document.getElementById('reconnect-banner').classList.remove('visible');
+        document.getElementById('pulse-dot').classList.remove('disconnected');
+        if (reconnectTimer) { clearInterval(reconnectTimer); reconnectTimer = null; }
+      };
+
+      ws.onmessage = function(event) {
+        var data = JSON.parse(event.data);
+        updateDashboard(data);
+      };
+
+      ws.onclose = function() {
+        document.getElementById('reconnect-banner').classList.add('visible');
+        document.getElementById('pulse-dot').classList.add('disconnected');
+        if (!reconnectTimer) {
+          reconnectTimer = setInterval(function() { connect(); }, 3000);
+        }
+      };
+
+      ws.onerror = function() { ws.close(); };
+    }
+
+    // ============================================================
+    // SYSTEM HEALTH STRIP
+    // ============================================================
+    function updateHealthStrip(system, sessionCount) {
+      var ramPct = Math.round((system.usedRamGB / system.totalRamGB) * 100);
+      document.getElementById('ram-value').textContent = system.usedRamGB + ' / ' + system.totalRamGB + ' GB';
+      document.getElementById('ram-sub').textContent = ramPct + '% used';
+      var ramBar = document.getElementById('ram-bar');
+      ramBar.style.width = ramPct + '%';
+      ramBar.style.background = ramPct > 85 ? 'var(--red)' : ramPct > 70 ? 'var(--amber)' : 'var(--green)';
+
+      var claudePct = system.totalRamGB > 0
+        ? Math.round((system.claudeRamGB / system.totalRamGB) * 100) : 0;
+      document.getElementById('claude-ram-value').textContent = system.claudeRamGB + ' GB';
+      document.getElementById('claude-ram-sub').textContent = claudePct + '% of total';
+
+      document.getElementById('cpu-value').textContent = system.cpuLoadPercent + '%';
+      document.getElementById('cpu-sub').textContent = system.cpuLoadAvg1m + ' / ' + system.cpuCores + ' cores';
+
+      document.getElementById('sessions-value').textContent = sessionCount;
+      document.getElementById('session-count').textContent = sessionCount + ' session' + (sessionCount !== 1 ? 's' : '');
+
+      document.getElementById('last-updated').textContent = 'Updated just now';
+    }
+
+    // ============================================================
+    // DASHBOARD UPDATE (called on each WS message)
+    // ============================================================
+    function updateDashboard(data) {
+      var current = data.current;
+      var history = data.history;
+      updateHealthStrip(current.system, current.sessions.length);
+      updateCharts(history);
+      renderSessionCards(current.sessions);
+    }
+
+    // Chart and session card stubs - implemented in Tasks 7 and 8
+    function updateCharts(history) {}
+    function renderSessionCards(sessions) {
+      var grid = document.getElementById('sessions-grid');
+      var emptyState = document.getElementById('empty-state');
+      if (sessions.length === 0) {
+        grid.innerHTML = '';
+        emptyState.style.display = 'block';
+      } else {
+        emptyState.style.display = 'none';
+      }
+    }
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    connect();
+  </script>
+</body>
 </html>
