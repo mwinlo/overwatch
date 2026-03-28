@@ -114,6 +114,7 @@
     .chart-card {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 8px; padding: 16px 20px;
+      max-height: 280px;
     }
     .chart-card h3 {
       font-family: var(--font-mono); font-size: 13px; font-weight: 600;
@@ -336,7 +337,7 @@
         type: 'line',
         data: { labels: [], datasets: [] },
         options: {
-          responsive: true, maintainAspectRatio: false,
+          responsive: true, maintainAspectRatio: true, aspectRatio: 2.5,
           animation: { duration: 300 },
           scales: {
             x: { ticks: tickOpts, grid: { color: gridColor } },
@@ -353,7 +354,7 @@
         type: 'line',
         data: { labels: [], datasets: [] },
         options: {
-          responsive: true, maintainAspectRatio: false,
+          responsive: true, maintainAspectRatio: true, aspectRatio: 2.5,
           animation: { duration: 300 },
           scales: {
             x: { ticks: tickOpts, grid: { color: gridColor } },
