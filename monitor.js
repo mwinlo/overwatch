@@ -1,5 +1,8 @@
 // Process discovery and metrics collection for macOS
 const { execSync } = require('child_process');
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
 function parseVmStat(output) {
   const lines = output.trim().split('\n');
@@ -79,4 +82,155 @@ function getSystemMetrics() {
   };
 }
 
-module.exports = { parseVmStat, parseLoadAvg, parsePsOutput, getSystemMetrics };
+function buildProcessTree(processes, rootPids) {
+  const byPid = new Map(processes.map(p => [p.pid, p]));
+  const childrenOf = new Map();
+  for (const p of processes) {
+    if (!childrenOf.has(p.ppid)) childrenOf.set(p.ppid, []);
+    childrenOf.get(p.ppid).push(p);
+  }
+
+  function getDescendants(pid) {
+    const result = [];
+    for (const child of (childrenOf.get(pid) || [])) {
+      result.push(child);
+      result.push(...getDescendants(child.pid));
+    }
+    return result;
+  }
+
+  return rootPids
+    .filter(pid => byPid.has(pid))
+    .map(pid => ({
+      process: byPid.get(pid),
+      descendants: getDescendants(pid),
+    }));
+}
+
+function getWorkingDir(pid) {
+  try {
+    const output = execSync(`lsof -a -p ${pid} -d cwd -Fn 2>/dev/null`, {
+      encoding: 'utf8',
+      timeout: 3000,
+    });
+    const nLine = output.split('\n').find(l => l.startsWith('n') && l.length > 1);
+    return nLine ? nLine.slice(1) : null;
+  } catch {
+    return null;
+  }
+}
+
+function getThreadCount(pid) {
+  try {
+    const output = execSync(`ps -M ${pid} 2>/dev/null`, { encoding: 'utf8', timeout: 3000 });
+    const lines = output.trim().split('\n');
+    return Math.max(lines.length - 1, 1);
+  } catch {
+    return 1;
+  }
+}
+
+function getTokenInfo(workingDir) {
+  try {
+    const slug = workingDir.replace(/\//g, '-');
+    const projectDir = path.join(os.homedir(), '.claude', 'projects', slug);
+    if (!fs.existsSync(projectDir)) return null;
+
+    const files = fs.readdirSync(projectDir).filter(f => f.endsWith('.jsonl'));
+    let messageCount = 0;
+    let inputTokens = 0;
+    let outputTokens = 0;
+
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(projectDir, file), 'utf8');
+      for (const line of content.split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          const obj = JSON.parse(line);
+          if (obj.type === 'assistant') {
+            messageCount++;
+            const usage = obj.message?.usage;
+            if (usage) {
+              inputTokens += usage.input_tokens || 0;
+              outputTokens += usage.output_tokens || 0;
+            }
+          }
+        } catch {
+          // skip malformed lines
+        }
+      }
+    }
+
+    const estimatedCostUSD = Math.round(((inputTokens / 1e6) * 3 + (outputTokens / 1e6) * 15) * 100) / 100;
+    return { input: inputTokens, output: outputTokens, estimatedCostUSD, messageCount };
+  } catch {
+    return null;
+  }
+}
+
+function getClaudeSessions() {
+  let psOutput;
+  try {
+    psOutput = execSync('ps -eo pid,ppid,rss,%cpu,etime,command', { encoding: 'utf8', timeout: 5000 });
+  } catch {
+    return [];
+  }
+
+  const allProcesses = parsePsOutput(psOutput);
+
+  const claudeProcesses = allProcesses.filter(p => {
+    const cmd = p.command;
+    return (cmd === 'claude' || /\/claude(\s|$)/.test(cmd))
+      && !cmd.includes('Claude.app')
+      && !cmd.includes('claude_crashpad')
+      && !cmd.includes('Claude Helper');
+  });
+
+  if (claudeProcesses.length === 0) return [];
+
+  const claudePids = claudeProcesses.map(p => p.pid);
+  const trees = buildProcessTree(allProcesses, claudePids);
+
+  return trees.map(tree => {
+    const proc = tree.process;
+    const descendants = tree.descendants;
+    const treeRssKB = proc.rssKB + descendants.reduce((sum, d) => sum + d.rssKB, 0);
+    const workingDir = getWorkingDir(proc.pid);
+    const label = workingDir ? path.basename(workingDir) : `pid-${proc.pid}`;
+    const tokens = workingDir ? getTokenInfo(workingDir) : null;
+
+    return {
+      pid: proc.pid,
+      workingDir: workingDir || 'unknown',
+      label,
+      rssGB: Math.round((proc.rssKB / 1048576) * 100) / 100,
+      treeRssGB: Math.round((treeRssKB / 1048576) * 100) / 100,
+      cpuPercent: proc.cpuPercent,
+      threadCount: getThreadCount(proc.pid),
+      childCount: descendants.length,
+      elapsed: proc.elapsed,
+      tokens: tokens || { input: 0, output: 0, estimatedCostUSD: 0, messageCount: 0 },
+    };
+  });
+}
+
+function collectAll() {
+  const system = getSystemMetrics();
+  const sessions = getClaudeSessions();
+  system.claudeRamGB = Math.round(sessions.reduce((sum, s) => sum + s.treeRssGB, 0) * 100) / 100;
+  return {
+    timestamp: new Date().toISOString(),
+    system,
+    sessions,
+  };
+}
+
+module.exports = {
+  parseVmStat,
+  parseLoadAvg,
+  parsePsOutput,
+  buildProcessTree,
+  getSystemMetrics,
+  getClaudeSessions,
+  collectAll,
+};
