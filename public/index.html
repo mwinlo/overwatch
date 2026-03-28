@@ -318,8 +318,122 @@
       renderSessionCards(current.sessions);
     }
 
-    // Chart and session card stubs - implemented in Tasks 7 and 8
-    function updateCharts(history) {}
+    // ============================================================
+    // CHARTS
+    // ============================================================
+    var SESSION_COLORS = [
+      '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b',
+      '#10b981', '#06b6d4', '#f43f5e', '#84cc16',
+    ];
+    var memoryChart = null;
+    var cpuChart = null;
+
+    function initCharts() {
+      var gridColor = 'rgba(255,255,255,0.04)';
+      var tickOpts = { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 }, maxTicksLimit: 5 };
+
+      memoryChart = new Chart(document.getElementById('memory-chart'), {
+        type: 'line',
+        data: { labels: [], datasets: [] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          animation: { duration: 300 },
+          scales: {
+            x: { ticks: tickOpts, grid: { color: gridColor } },
+            y: { ticks: tickOpts, grid: { color: gridColor }, beginAtZero: true,
+                 stacked: true, title: { display: true, text: 'GB', color: '#64748b' } },
+          },
+          plugins: {
+            legend: { labels: { color: '#e2e8f0', font: { family: 'IBM Plex Sans', size: 11 }, boxWidth: 12 } },
+          },
+        },
+      });
+
+      cpuChart = new Chart(document.getElementById('cpu-chart'), {
+        type: 'line',
+        data: { labels: [], datasets: [] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          animation: { duration: 300 },
+          scales: {
+            x: { ticks: tickOpts, grid: { color: gridColor } },
+            y: { ticks: tickOpts, grid: { color: gridColor }, beginAtZero: true,
+                 title: { display: true, text: '%', color: '#64748b' } },
+          },
+          plugins: {
+            legend: { labels: { color: '#e2e8f0', font: { family: 'IBM Plex Sans', size: 11 }, boxWidth: 12 } },
+          },
+        },
+      });
+    }
+
+    function updateCharts(history) {
+      if (!memoryChart) initCharts();
+      if (!history || history.length === 0) return;
+
+      var labels = history.map(function(h) {
+        var d = new Date(h.timestamp);
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      });
+
+      // Collect all unique session labels across history
+      var allLabels = {};
+      history.forEach(function(h) {
+        h.sessions.forEach(function(s) { allLabels[s.label] = true; });
+      });
+      var sessionLabels = Object.keys(allLabels);
+
+      // Memory chart: stacked area per session
+      memoryChart.data.labels = labels;
+      memoryChart.data.datasets = sessionLabels.map(function(label, i) {
+        return {
+          label: label,
+          data: history.map(function(h) {
+            var s = h.sessions.find(function(s) { return s.label === label; });
+            return s ? s.treeRssGB : 0;
+          }),
+          borderColor: SESSION_COLORS[i % SESSION_COLORS.length],
+          backgroundColor: SESSION_COLORS[i % SESSION_COLORS.length] + '30',
+          fill: true, tension: 0.3, pointRadius: 0, borderWidth: 1.5,
+        };
+      });
+
+      // Add total RAM ceiling line
+      var totalRam = history[0] && history[0].system ? history[0].system.totalRamGB : null;
+      if (totalRam) {
+        memoryChart.data.datasets.push({
+          label: 'Total RAM',
+          data: history.map(function() { return totalRam; }),
+          borderColor: '#ef4444', borderDash: [6, 4], borderWidth: 1,
+          pointRadius: 0, fill: false, stack: 'ceiling',
+        });
+      }
+      memoryChart.update('none');
+
+      // CPU chart: one line per session
+      cpuChart.data.labels = labels;
+      cpuChart.data.datasets = sessionLabels.map(function(label, i) {
+        return {
+          label: label,
+          data: history.map(function(h) {
+            var s = h.sessions.find(function(s) { return s.label === label; });
+            return s ? s.cpuPercent : 0;
+          }),
+          borderColor: SESSION_COLORS[i % SESSION_COLORS.length],
+          backgroundColor: 'transparent',
+          tension: 0.3, pointRadius: 0, borderWidth: 1.5,
+        };
+      });
+
+      // Add 100% per-core dotted line
+      cpuChart.data.datasets.push({
+        label: '100% (1 core)',
+        data: history.map(function() { return 100; }),
+        borderColor: 'rgba(255,255,255,0.15)', borderDash: [4, 4],
+        borderWidth: 1, pointRadius: 0, fill: false,
+      });
+      cpuChart.update('none');
+    }
     function renderSessionCards(sessions) {
       var grid = document.getElementById('sessions-grid');
       var emptyState = document.getElementById('empty-state');
