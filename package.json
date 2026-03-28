@@ -1,0 +1,16 @@
+{
+  "name": "overwatch",
+  "version": "1.0.0",
+  "description": "Local monitoring dashboard for Claude Code sessions on macOS",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": [],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.0",
+    "ws": "^8.18.0"
+  }
+}
