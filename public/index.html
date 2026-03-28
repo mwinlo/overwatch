@@ -434,15 +434,113 @@
       });
       cpuChart.update('none');
     }
+    // ============================================================
+    // SESSION CARDS
+    // ============================================================
+    var killTimers = {};
+
+    function statusColor(treeRssGB) {
+      if (treeRssGB > 4) return 'var(--red)';
+      if (treeRssGB > 2) return 'var(--amber)';
+      return 'var(--green)';
+    }
+
+    function barColor(pct) {
+      if (pct > 85) return 'var(--red)';
+      if (pct > 70) return 'var(--amber)';
+      return 'var(--green)';
+    }
+
+    function formatTokens(n) {
+      if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+      if (n >= 1000) return Math.round(n / 1000) + 'K';
+      return String(n);
+    }
+
+    function escapeHtml(str) {
+      var div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
     function renderSessionCards(sessions) {
       var grid = document.getElementById('sessions-grid');
       var emptyState = document.getElementById('empty-state');
+
       if (sessions.length === 0) {
         grid.innerHTML = '';
         emptyState.style.display = 'block';
-      } else {
-        emptyState.style.display = 'none';
+        return;
       }
+      emptyState.style.display = 'none';
+
+      // Sort by memory usage (highest first)
+      var sorted = sessions.slice().sort(function(a, b) { return b.treeRssGB - a.treeRssGB; });
+
+      grid.innerHTML = sorted.map(function(s) {
+        var memPct = Math.min(100, (s.treeRssGB / 8) * 100);
+        var cpuPct = Math.min(100, s.cpuPercent);
+        var isConfirming = !!killTimers[s.pid];
+
+        return '<div class="session-card" id="card-' + s.pid + '">'
+          + '<div class="session-header">'
+          +   '<span class="session-label">'
+          +     '<span class="status-dot" style="background:' + statusColor(s.treeRssGB) + '"></span>'
+          +     escapeHtml(s.label)
+          +   '</span>'
+          +   '<span class="session-pid">PID ' + s.pid + '</span>'
+          + '</div>'
+          + '<div class="session-path">' + escapeHtml(s.workingDir) + '</div>'
+          + '<div class="session-metrics">'
+          +   '<div class="metric"><span class="metric-label">Memory</span><span class="metric-value">' + s.treeRssGB + ' GB</span></div>'
+          +   '<div class="metric"><span class="metric-label">CPU</span><span class="metric-value">' + s.cpuPercent + '%</span></div>'
+          +   '<div class="metric metric-bar"><div class="mini-bar"><div class="mini-fill" style="width:' + memPct + '%;background:' + barColor(memPct) + '"></div></div></div>'
+          +   '<div class="metric"><span class="metric-label">Threads</span><span class="metric-value">' + s.threadCount + '</span></div>'
+          +   '<div class="metric"><span class="metric-label">Children</span><span class="metric-value">' + s.childCount + '</span></div>'
+          +   '<div class="metric"><span class="metric-label">Uptime</span><span class="metric-value">' + s.elapsed + '</span></div>'
+          + '</div>'
+          + '<div class="session-tokens">'
+          +   'Tokens In: ' + formatTokens(s.tokens.input) + ' &nbsp; Out: ' + formatTokens(s.tokens.output)
+          +   ' &nbsp; ~$' + s.tokens.estimatedCostUSD.toFixed(2) + '<br>'
+          +   'Messages: ' + s.tokens.messageCount
+          + '</div>'
+          + '<button class="kill-btn' + (isConfirming ? ' confirming' : '') + '" onclick="handleKill(' + s.pid + ', this)">'
+          +   (isConfirming ? 'Confirm Kill?' : 'Kill Session')
+          + '</button>'
+          + '<div style="clear:both"></div>'
+          + '</div>';
+      }).join('');
+    }
+
+    function handleKill(pid, btn) {
+      if (!killTimers[pid]) {
+        // First click: enter confirmation mode
+        btn.textContent = 'Confirm Kill?';
+        btn.classList.add('confirming');
+        killTimers[pid] = setTimeout(function() {
+          delete killTimers[pid];
+          btn.textContent = 'Kill Session';
+          btn.classList.remove('confirming');
+        }, 3000);
+        return;
+      }
+
+      // Second click: actually kill
+      clearTimeout(killTimers[pid]);
+      delete killTimers[pid];
+
+      fetch('/api/kill/' + pid, { method: 'POST' })
+        .then(function(res) {
+          if (res.ok) {
+            var card = document.getElementById('card-' + pid);
+            if (card) card.classList.add('killing');
+          } else {
+            return res.json().then(function(data) { alert('Kill failed: ' + data.error); });
+          }
+        })
+        .catch(function(err) {
+          alert('Kill failed: ' + err.message);
+        });
     }
 
     // ============================================================
