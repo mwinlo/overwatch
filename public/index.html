@@ -79,7 +79,7 @@
 
     /* System Health Strip */
     .health-strip {
-      display: grid; grid-template-columns: repeat(4, 1fr);
+      display: grid; grid-template-columns: repeat(5, 1fr);
       gap: 16px; padding: 20px 24px;
     }
     @media (max-width: 900px) { .health-strip { grid-template-columns: repeat(2, 1fr); } }
@@ -240,6 +240,11 @@
       <div class="health-card-value" id="sessions-value">&mdash;</div>
       <div class="health-card-sub">active</div>
     </div>
+    <div class="health-card">
+      <div class="health-card-label">Total Tokens</div>
+      <div class="health-card-value" id="tokens-value">&mdash;</div>
+      <div class="health-card-sub" id="tokens-sub"></div>
+    </div>
   </section>
 
   <section class="charts-row">
@@ -309,7 +314,8 @@
     // ============================================================
     // SYSTEM HEALTH STRIP
     // ============================================================
-    function updateHealthStrip(system, sessionCount) {
+    function updateHealthStrip(system, sessions) {
+      var sessionCount = sessions.length;
       var ramPct = Math.round((system.usedRamGB / system.totalRamGB) * 100);
       document.getElementById('ram-value').textContent = system.usedRamGB + ' / ' + system.totalRamGB + ' GB';
       document.getElementById('ram-sub').textContent = ramPct + '% used';
@@ -328,6 +334,16 @@
       document.getElementById('sessions-value').textContent = sessionCount;
       document.getElementById('session-count').textContent = sessionCount + ' session' + (sessionCount !== 1 ? 's' : '');
 
+      // Total tokens across all sessions
+      var totalIn = 0, totalOut = 0, totalCost = 0;
+      sessions.forEach(function(s) {
+        totalIn += s.tokens.input;
+        totalOut += s.tokens.output;
+        totalCost += s.tokens.estimatedCostUSD;
+      });
+      document.getElementById('tokens-value').textContent = formatTokens(totalIn + totalOut);
+      document.getElementById('tokens-sub').textContent = 'In: ' + formatTokens(totalIn) + ' Out: ' + formatTokens(totalOut) + ' ~$' + totalCost.toFixed(2);
+
       document.getElementById('last-updated').textContent = 'Updated just now';
     }
 
@@ -337,7 +353,7 @@
     function updateDashboard(data) {
       var current = data.current;
       var history = data.history;
-      updateHealthStrip(current.system, current.sessions.length);
+      updateHealthStrip(current.system, current.sessions);
       updateCharts(history);
       renderSessionCards(current.sessions);
     }
