@@ -126,6 +126,20 @@
       letter-spacing: 1px; margin-bottom: 12px;
     }
 
+    /* Sort Bar */
+    .sort-bar {
+      padding: 0 24px 12px;
+      display: flex; gap: 8px;
+    }
+    .sort-btn {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text-secondary); border-radius: 6px;
+      padding: 5px 14px; font-family: var(--font-mono);
+      font-size: 12px; cursor: pointer; transition: all 0.15s ease;
+    }
+    .sort-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.15); }
+    .sort-btn.active { color: var(--text); background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); }
+
     /* Session Cards */
     .sessions-grid {
       display: grid; grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr));
@@ -238,6 +252,11 @@
       <canvas id="cpu-chart" height="200"></canvas>
     </div>
   </section>
+
+  <div class="sort-bar">
+    <button class="sort-btn active" id="sort-age" onclick="setSortMode('age')">Oldest first</button>
+    <button class="sort-btn" id="sort-memory" onclick="setSortMode('memory')">By memory</button>
+  </div>
 
   <section class="sessions-grid" id="sessions-grid"></section>
 
@@ -443,6 +462,15 @@
     // SESSION CARDS
     // ============================================================
     var killTimers = {};
+    var sortMode = 'age'; // 'age' (oldest/lowest PID first) or 'memory' (highest first)
+
+    function setSortMode(mode) {
+      sortMode = mode;
+      document.getElementById('sort-age').classList.toggle('active', mode === 'age');
+      document.getElementById('sort-memory').classList.toggle('active', mode === 'memory');
+      if (lastSessions) renderSessionCards(lastSessions);
+    }
+    var lastSessions = null;
 
     function statusColor(treeRssGB) {
       if (treeRssGB > 4) return 'var(--red)';
@@ -479,8 +507,12 @@
       }
       emptyState.style.display = 'none';
 
-      // Sort by memory usage (highest first)
-      var sorted = sessions.slice().sort(function(a, b) { return b.treeRssGB - a.treeRssGB; });
+      lastSessions = sessions;
+      var sorted = sessions.slice().sort(
+        sortMode === 'memory'
+          ? function(a, b) { return b.treeRssGB - a.treeRssGB; }
+          : function(a, b) { return a.pid - b.pid; }
+      );
 
       grid.innerHTML = sorted.map(function(s) {
         var memPct = Math.min(100, (s.treeRssGB / 8) * 100);
