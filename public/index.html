@@ -30,6 +30,7 @@
       color: var(--text);
       font-family: var(--font-sans);
       min-height: 100vh;
+      overflow-x: hidden;
     }
 
     /* Reconnection Banner */
@@ -82,9 +83,11 @@
       gap: 16px; padding: 20px 24px;
     }
     @media (max-width: 900px) { .health-strip { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 500px) { .health-strip { grid-template-columns: 1fr; } }
     .health-card {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 8px; padding: 16px 20px;
+      min-width: 0;
     }
     .health-card-label {
       font-size: 12px; font-weight: 500; color: var(--text-secondary);
@@ -114,7 +117,8 @@
     .chart-card {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 8px; padding: 16px 20px;
-      max-height: 280px;
+      height: 220px;
+      min-width: 0;
     }
     .chart-card h3 {
       font-family: var(--font-mono); font-size: 13px; font-weight: 600;
@@ -124,7 +128,7 @@
 
     /* Session Cards */
     .sessions-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr));
       gap: 16px; padding: 0 24px 20px;
     }
     .session-card {
@@ -337,7 +341,7 @@
         type: 'line',
         data: { labels: [], datasets: [] },
         options: {
-          responsive: true, maintainAspectRatio: true, aspectRatio: 2.5,
+          responsive: true, maintainAspectRatio: false,
           animation: { duration: 300 },
           scales: {
             x: { ticks: tickOpts, grid: { color: gridColor } },
@@ -354,7 +358,7 @@
         type: 'line',
         data: { labels: [], datasets: [] },
         options: {
-          responsive: true, maintainAspectRatio: true, aspectRatio: 2.5,
+          responsive: true, maintainAspectRatio: false,
           animation: { duration: 300 },
           scales: {
             x: { ticks: tickOpts, grid: { color: gridColor } },
