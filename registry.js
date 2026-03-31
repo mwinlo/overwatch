@@ -11,59 +11,19 @@ const PORT_RANGE_END = 3299;
 
 const DEFAULT_REGISTRY = {
   projects: {
-    'ivi-website': {
+    'my-app': {
       port: 3000,
-      path: '~/projects/Lumirah/ivi-website',
-      command: 'npm run dev',
-      group: 'lumirah',
-      description: 'iVi product website (Next.js)',
-      memoryLimitMB: 2048,
-    },
-    'hopcircle': {
-      port: 3001,
-      path: '~/projects/hopcircle-site',
+      path: '~/projects/my-app',
       command: 'npm run dev',
       group: 'apps',
-      description: 'HopCircle website (Next.js)',
+      description: 'Example app (Next.js)',
       memoryLimitMB: 1024,
-    },
-    'empax-layer': {
-      port: 3002,
-      path: '~/projects/empax-layer',
-      command: 'npm run dev',
-      group: 'emyria',
-      description: 'Empax Layer service',
-      memoryLimitMB: 2048,
-    },
-    'bridgetime': {
-      port: 3003,
-      path: '~/projects/bridgetime',
-      command: 'npm run dev',
-      group: 'apps',
-      description: 'BridgeTime app',
-      memoryLimitMB: 1024,
-    },
-    'overwatch': {
-      port: 3100,
-      path: '~/Documents/Overwatch',
-      command: 'npm start',
-      group: 'infra',
-      description: 'Dev orchestration hub',
-      memoryLimitMB: 512,
-    },
-    'winston': {
-      port: 3150,
-      path: '~/Documents/Winston',
-      command: 'npm start',
-      group: 'infra',
-      description: 'Winston monitoring service',
-      memoryLimitMB: 512,
     },
   },
   portRanges: {
     'web-apps': '3000-3099 — Next.js / React dev servers',
-    'infra': '3100-3199 — Overwatch, Winston, internal tools',
-    'api': '3200-3299 — backend APIs, FastAPI, Express',
+    'infra': '3100-3199 — internal tools',
+    'api': '3200-3299 — backend APIs',
   },
 };
 
