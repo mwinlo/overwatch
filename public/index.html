@@ -374,6 +374,121 @@
       text-align: center; padding: 16px;
       font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono);
     }
+
+    /* ========== TAB NAVIGATION ========== */
+    .tab-bar {
+      display: flex; gap: 0; padding: 0 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-btn {
+      background: none; border: none; border-bottom: 2px solid transparent;
+      color: var(--text-secondary); font-family: var(--font-mono);
+      font-size: 13px; font-weight: 600; letter-spacing: 1px;
+      padding: 12px 20px; cursor: pointer; transition: all 0.15s ease;
+      text-transform: uppercase;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--text); border-bottom-color: var(--blue); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ========== PORT MAP PANEL ========== */
+    .portmap-summary {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 16px; padding: 20px 24px;
+    }
+    @media (max-width: 900px) { .portmap-summary { grid-template-columns: repeat(2, 1fr); } }
+
+    .portmap-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+      gap: 16px; padding: 0 24px 20px;
+    }
+
+    .port-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 20px; border-top: 3px solid var(--text-secondary);
+      transition: all 0.3s ease;
+    }
+    .port-card.running { border-top-color: var(--green); }
+    .port-card.warning { border-top-color: var(--amber); }
+    .port-card.over-limit { border-top-color: var(--red); }
+    .port-card.rogue { border-top-color: var(--red); border-style: dashed; border-top-style: solid; }
+
+    .port-card-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      margin-bottom: 4px;
+    }
+    .port-number {
+      font-family: var(--font-mono); font-size: 28px; font-weight: 700;
+      line-height: 1; color: var(--text);
+    }
+    .port-card.running .port-number { color: var(--green); }
+    .port-card.rogue .port-number { color: var(--red); }
+
+    .port-status-badge {
+      font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+      padding: 3px 10px; border-radius: 10px; letter-spacing: 0.5px;
+    }
+    .port-status-badge.running { background: rgba(34,197,94,0.15); color: var(--green); }
+    .port-status-badge.stopped { background: rgba(100,116,139,0.15); color: var(--text-secondary); }
+    .port-status-badge.rogue { background: rgba(239,68,68,0.15); color: var(--red); }
+    .port-status-badge.warning { background: rgba(245,158,11,0.15); color: var(--amber); }
+    .port-status-badge.over-limit { background: rgba(239,68,68,0.15); color: var(--red); }
+
+    .port-card-name {
+      font-family: var(--font-mono); font-size: 15px; font-weight: 700;
+      margin-bottom: 2px;
+    }
+    .port-card-desc {
+      font-size: 12px; color: var(--text-secondary); margin-bottom: 14px;
+    }
+    .port-card-group {
+      font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+      color: var(--blue); background: rgba(59,130,246,0.1);
+      padding: 2px 8px; border-radius: 4px; display: inline-block;
+      margin-bottom: 14px;
+    }
+
+    .port-metrics {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px;
+      font-size: 13px; margin-bottom: 14px;
+    }
+
+    /* Memory limit bar */
+    .mem-limit-bar {
+      height: 6px; background: rgba(255,255,255,0.08);
+      border-radius: 3px; overflow: hidden; margin-bottom: 14px;
+    }
+    .mem-limit-fill {
+      height: 100%; border-radius: 3px;
+      transition: width 0.5s ease, background 0.3s ease;
+    }
+
+    .port-card-actions {
+      display: flex; gap: 8px; justify-content: flex-end;
+    }
+    .port-action-btn {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text-secondary); border-radius: 6px;
+      padding: 6px 14px; font-family: var(--font-mono);
+      font-size: 12px; cursor: pointer; transition: all 0.15s ease;
+    }
+    .port-action-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.15); }
+    .port-action-btn.kill { color: var(--red); }
+    .port-action-btn.kill:hover { background: rgba(239,68,68,0.1); border-color: var(--red); }
+    .port-action-btn.confirming { background: var(--kill-red); color: white; border-color: var(--kill-red); }
+    .port-action-btn.clean { color: var(--amber); }
+    .port-action-btn.clean:hover { background: rgba(245,158,11,0.1); border-color: var(--amber); }
+
+    .rogue-label {
+      font-family: var(--font-mono); font-size: 13px; font-weight: 700;
+      color: var(--red); margin-bottom: 6px;
+    }
+    .rogue-command {
+      font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono);
+      word-break: break-all; margin-bottom: 14px;
+      max-height: 40px; overflow: hidden; text-overflow: ellipsis;
+    }
   </style>
 </head>
 <body>
@@ -396,6 +511,13 @@
     </div>
   </header>
 
+  <nav class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('sessions')">Sessions</button>
+    <button class="tab-btn" onclick="switchTab('portmap')">Port Map</button>
+  </nav>
+
+  <!-- ============ SESSIONS TAB ============ -->
+  <div id="tab-sessions" class="tab-content active">
   <section class="health-strip">
     <div class="health-card">
       <div class="health-card-label">RAM Usage</div>
@@ -447,9 +569,41 @@
     <p>No Claude Code sessions detected.</p>
     <p>Start one in a terminal with <code>claude</code></p>
   </div>
+  </div><!-- /tab-sessions -->
+
+  <!-- ============ PORT MAP TAB ============ -->
+  <div id="tab-portmap" class="tab-content">
+    <section class="portmap-summary">
+      <div class="health-card">
+        <div class="health-card-label">Active Ports</div>
+        <div class="health-card-value" id="pm-active-ports">&mdash;</div>
+        <div class="health-card-sub" id="pm-active-sub">of 0 registered</div>
+      </div>
+      <div class="health-card">
+        <div class="health-card-label">Dev Memory</div>
+        <div class="health-card-value" id="pm-total-mem">&mdash;</div>
+        <div class="health-card-sub" id="pm-mem-sub"></div>
+      </div>
+      <div class="health-card">
+        <div class="health-card-label">Cache Disk</div>
+        <div class="health-card-value" id="pm-cache-size">&mdash;</div>
+        <div class="health-card-sub" id="pm-cache-sub"></div>
+      </div>
+      <div class="health-card">
+        <div class="health-card-label">Rogues</div>
+        <div class="health-card-value" id="pm-rogue-count">&mdash;</div>
+        <div class="health-card-sub">unregistered ports</div>
+      </div>
+    </section>
+    <section class="portmap-grid" id="portmap-grid"></section>
+    <div class="empty-state" id="portmap-empty" style="display:none">
+      <p>No projects registered.</p>
+      <p>Registry: <code>~/.dev-registry.json</code></p>
+    </div>
+  </div><!-- /tab-portmap -->
 
   <footer class="footer">
-    Polling 3s (500ms under pressure) &bull; 20min history &bull; Auto-kill at 80% RAM &bull; Port 4040
+    Polling 3s (500ms under pressure) &bull; 20min history &bull; Auto-kill at 80% RAM &bull; Port 4040 &bull; <code>~/bin/dev</code> CLI
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -881,6 +1035,297 @@
         .catch(function(err) {
           alert('Kill failed: ' + err.message);
         });
+    }
+
+    // ============================================================
+    // TAB NAVIGATION
+    // ============================================================
+    var activeTab = 'sessions';
+    var portmapPollTimer = null;
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll('.tab-btn').forEach(function(btn) {
+        btn.classList.toggle('active', btn.textContent.toLowerCase().replace(' ', '') === tab);
+      });
+      document.querySelectorAll('.tab-content').forEach(function(el) {
+        el.classList.remove('active');
+      });
+      document.getElementById('tab-' + tab).classList.add('active');
+
+      if (tab === 'portmap') {
+        fetchPortMap();
+        if (!portmapPollTimer) portmapPollTimer = setInterval(fetchPortMap, 5000);
+      } else {
+        if (portmapPollTimer) { clearInterval(portmapPollTimer); portmapPollTimer = null; }
+      }
+    }
+
+    // ============================================================
+    // PORT MAP
+    // ============================================================
+    var portmapKillTimers = {};
+
+    function fetchPortMap() {
+      fetch('/api/status')
+        .then(function(r) { return r.json(); })
+        .then(function(data) { renderPortMap(data); })
+        .catch(function(err) { console.error('Port map fetch error:', err); });
+
+      fetch('/api/caches')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          document.getElementById('pm-cache-size').textContent = data.totalMB >= 1024
+            ? (data.totalMB / 1024).toFixed(1) + ' GB'
+            : data.totalMB + ' MB';
+          document.getElementById('pm-cache-sub').textContent = Object.keys(data.caches).length + ' projects scanned';
+        })
+        .catch(function() {});
+    }
+
+    function buildPortCard(p, name) {
+      var card = document.createElement('div');
+      var cardClass = 'port-card';
+      var badgeClass = 'port-status-badge';
+      var badgeText = 'STOPPED';
+
+      if (p.running) {
+        if (p.memoryPct >= 100) { cardClass += ' over-limit'; badgeClass += ' over-limit'; badgeText = 'OVER LIMIT'; }
+        else if (p.memoryPct >= 80) { cardClass += ' warning'; badgeClass += ' warning'; badgeText = 'WARNING'; }
+        else { cardClass += ' running'; badgeClass += ' running'; badgeText = 'RUNNING'; }
+      } else { badgeClass += ' stopped'; }
+      card.className = cardClass;
+
+      // Header
+      var header = document.createElement('div');
+      header.className = 'port-card-header';
+      var portNum = document.createElement('span');
+      portNum.className = 'port-number';
+      portNum.textContent = p.port;
+      var badge = document.createElement('span');
+      badge.className = badgeClass;
+      badge.textContent = badgeText;
+      header.appendChild(portNum);
+      header.appendChild(badge);
+      card.appendChild(header);
+
+      // Name + desc + group
+      var nameEl = document.createElement('div');
+      nameEl.className = 'port-card-name';
+      nameEl.textContent = name;
+      card.appendChild(nameEl);
+      var descEl = document.createElement('div');
+      descEl.className = 'port-card-desc';
+      descEl.textContent = p.description;
+      card.appendChild(descEl);
+      var groupEl = document.createElement('span');
+      groupEl.className = 'port-card-group';
+      groupEl.textContent = p.group;
+      card.appendChild(groupEl);
+
+      if (p.running) {
+        // Metrics grid
+        var metrics = document.createElement('div');
+        metrics.className = 'port-metrics';
+        var pairs = [['Memory', p.treeRssMB + ' MB'], ['CPU', p.cpuPercent + '%'], ['PID', p.pid], ['Uptime', p.elapsed || '\u2014']];
+        pairs.forEach(function(pair) {
+          var m = document.createElement('div');
+          m.className = 'metric';
+          var lbl = document.createElement('span');
+          lbl.className = 'metric-label';
+          lbl.textContent = pair[0];
+          var val = document.createElement('span');
+          val.className = 'metric-value';
+          val.textContent = pair[1];
+          m.appendChild(lbl);
+          m.appendChild(val);
+          metrics.appendChild(m);
+        });
+        card.appendChild(metrics);
+
+        // Memory limit bar
+        var limitPct = Math.min(100, p.memoryPct);
+        var limitColor = p.memoryPct >= 100 ? 'var(--red)' : (p.memoryPct >= 80 ? 'var(--amber)' : 'var(--green)');
+        var barWrap = document.createElement('div');
+        barWrap.className = 'mem-limit-bar';
+        var barFill = document.createElement('div');
+        barFill.className = 'mem-limit-fill';
+        barFill.style.width = limitPct + '%';
+        barFill.style.background = limitColor;
+        barWrap.appendChild(barFill);
+        card.appendChild(barWrap);
+
+        var limitText = document.createElement('div');
+        limitText.style.cssText = 'font-size:11px;color:var(--text-secondary);font-family:var(--font-mono);margin-bottom:14px';
+        limitText.textContent = p.treeRssMB + ' / ' + p.memoryLimitMB + ' MB (' + p.memoryPct + '%)';
+        card.appendChild(limitText);
+      }
+
+      // Actions
+      var actions = document.createElement('div');
+      actions.className = 'port-card-actions';
+      if (p.running) {
+        var isConfirm = !!portmapKillTimers[name];
+        var killBtn = document.createElement('button');
+        killBtn.className = 'port-action-btn kill' + (isConfirm ? ' confirming' : '');
+        killBtn.textContent = isConfirm ? 'Confirm?' : 'Kill';
+        killBtn.addEventListener('click', function() { handlePortKill(name, killBtn); });
+        actions.appendChild(killBtn);
+      }
+      var cleanBtn = document.createElement('button');
+      cleanBtn.className = 'port-action-btn clean';
+      cleanBtn.textContent = 'Clean';
+      cleanBtn.addEventListener('click', function() { handlePortClean(name, cleanBtn); });
+      actions.appendChild(cleanBtn);
+      card.appendChild(actions);
+
+      return card;
+    }
+
+    function buildRogueCard(r) {
+      var card = document.createElement('div');
+      card.className = 'port-card rogue';
+      var key = 'rogue-' + r.port;
+
+      var header = document.createElement('div');
+      header.className = 'port-card-header';
+      var portNum = document.createElement('span');
+      portNum.className = 'port-number';
+      portNum.textContent = r.port;
+      var badge = document.createElement('span');
+      badge.className = 'port-status-badge rogue';
+      badge.textContent = 'ROGUE';
+      header.appendChild(portNum);
+      header.appendChild(badge);
+      card.appendChild(header);
+
+      var label = document.createElement('div');
+      label.className = 'rogue-label';
+      label.textContent = '? Unregistered process';
+      card.appendChild(label);
+      var cmd = document.createElement('div');
+      cmd.className = 'rogue-command';
+      cmd.textContent = r.command || 'unknown';
+      card.appendChild(cmd);
+
+      var metrics = document.createElement('div');
+      metrics.className = 'port-metrics';
+      [['Memory', r.rssMB + ' MB'], ['CPU', r.cpuPercent + '%'], ['PID', r.pid || '?'], ['Uptime', r.elapsed || '?']].forEach(function(pair) {
+        var m = document.createElement('div');
+        m.className = 'metric';
+        var lbl = document.createElement('span');
+        lbl.className = 'metric-label';
+        lbl.textContent = pair[0];
+        var val = document.createElement('span');
+        val.className = 'metric-value';
+        val.textContent = pair[1];
+        m.appendChild(lbl);
+        m.appendChild(val);
+        metrics.appendChild(m);
+      });
+      card.appendChild(metrics);
+
+      var actions = document.createElement('div');
+      actions.className = 'port-card-actions';
+      var isConfirm = !!portmapKillTimers[key];
+      var killBtn = document.createElement('button');
+      killBtn.className = 'port-action-btn kill' + (isConfirm ? ' confirming' : '');
+      killBtn.textContent = isConfirm ? 'Confirm?' : 'Kill';
+      killBtn.addEventListener('click', function() { handleRogueKill(r.port, killBtn); });
+      actions.appendChild(killBtn);
+      card.appendChild(actions);
+
+      return card;
+    }
+
+    function renderPortMap(data) {
+      var projects = data.projects;
+      var rogues = data.rogues;
+      var summary = data.summary;
+
+      document.getElementById('pm-active-ports').textContent = summary.totalPorts;
+      document.getElementById('pm-active-sub').textContent = 'of ' + summary.totalProjects + ' registered';
+      document.getElementById('pm-total-mem').textContent = summary.totalMemMB >= 1024
+        ? (summary.totalMemMB / 1024).toFixed(1) + ' GB' : summary.totalMemMB + ' MB';
+      document.getElementById('pm-rogue-count').textContent = summary.rogueCount;
+      document.getElementById('pm-rogue-count').style.color = summary.rogueCount > 0 ? 'var(--red)' : '';
+
+      var names = Object.keys(projects);
+      var grid = document.getElementById('portmap-grid');
+
+      if (names.length === 0 && rogues.length === 0) {
+        grid.textContent = '';
+        document.getElementById('portmap-empty').style.display = 'block';
+        return;
+      }
+      document.getElementById('portmap-empty').style.display = 'none';
+
+      names.sort(function(a, b) {
+        return projects[a].port - projects[b].port;
+      });
+
+      // Build DOM safely
+      var frag = document.createDocumentFragment();
+      names.forEach(function(name) { frag.appendChild(buildPortCard(projects[name], name)); });
+      rogues.forEach(function(r) { frag.appendChild(buildRogueCard(r)); });
+
+      grid.textContent = '';
+      grid.appendChild(frag);
+    }
+
+    function handlePortKill(name, btn) {
+      if (!portmapKillTimers[name]) {
+        btn.textContent = 'Confirm?';
+        btn.classList.add('confirming');
+        portmapKillTimers[name] = setTimeout(function() {
+          delete portmapKillTimers[name];
+          btn.textContent = 'Kill';
+          btn.classList.remove('confirming');
+        }, 3000);
+        return;
+      }
+      clearTimeout(portmapKillTimers[name]);
+      delete portmapKillTimers[name];
+      fetch('/api/kill-project/' + encodeURIComponent(name), { method: 'POST' })
+        .then(function(res) {
+          if (!res.ok) return res.json().then(function(d) { alert('Kill failed: ' + d.error); });
+          fetchPortMap();
+        })
+        .catch(function(err) { alert('Kill failed: ' + err.message); });
+    }
+
+    function handleRogueKill(port, btn) {
+      var key = 'rogue-' + port;
+      if (!portmapKillTimers[key]) {
+        btn.textContent = 'Confirm?';
+        btn.classList.add('confirming');
+        portmapKillTimers[key] = setTimeout(function() {
+          delete portmapKillTimers[key];
+          btn.textContent = 'Kill';
+          btn.classList.remove('confirming');
+        }, 3000);
+        return;
+      }
+      clearTimeout(portmapKillTimers[key]);
+      delete portmapKillTimers[key];
+      fetch('/api/kill-port/' + port, { method: 'POST' })
+        .then(function(res) {
+          if (!res.ok) return res.json().then(function(d) { alert('Kill failed: ' + d.error); });
+          fetchPortMap();
+        })
+        .catch(function(err) { alert('Kill failed: ' + err.message); });
+    }
+
+    function handlePortClean(name, btn) {
+      btn.textContent = 'Cleaning...';
+      btn.disabled = true;
+      fetch('/api/clean/' + encodeURIComponent(name), { method: 'POST' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          btn.textContent = data.totalFreedMB ? 'Freed ' + data.totalFreedMB + ' MB' : 'No caches';
+          setTimeout(function() { btn.textContent = 'Clean'; btn.disabled = false; }, 2000);
+        })
+        .catch(function() { btn.textContent = 'Error'; btn.disabled = false; });
     }
 
     // ============================================================

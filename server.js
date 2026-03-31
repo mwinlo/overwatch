@@ -4,8 +4,10 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { WebSocketServer } = require('ws');
 const WebSocket = require('ws');
+const treeKill = require('tree-kill');
 const { collectAll } = require('./monitor');
 const { detectAlerts: _detectAlerts, detectRunaway: _detectRunaway, detectBurst: _detectBurst } = require('./alerts');
+const registry = require('./registry');
 
 const DEFAULT_PORT = 4040;
 const POLL_INTERVAL_MS = 3000;
@@ -55,6 +57,129 @@ function createServer(port = DEFAULT_PORT) {
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  // ---- Dev Registry API ----
+  // Ensure registry exists on startup
+  registry.ensureRegistry();
+
+  app.use(express.json());
+
+  // Project statuses + rogue process scan
+  app.get('/api/status', async (req, res) => {
+    try {
+      const reg = registry.ensureRegistry();
+      const [projects, rogues] = await Promise.all([
+        registry.getProjectStatuses(reg),
+        registry.findRogueProcesses(reg),
+      ]);
+
+      // Summary stats
+      const projectList = Object.values(projects);
+      const running = projectList.filter(p => p.running);
+      const totalMemMB = running.reduce((sum, p) => sum + p.treeRssMB, 0);
+      const totalPorts = running.length;
+
+      res.json({
+        projects,
+        rogues,
+        summary: { totalMemMB, totalPorts, totalProjects: projectList.length, rogueCount: rogues.length },
+        portRanges: reg.portRanges,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Register / update a project
+  app.post('/api/register', (req, res) => {
+    const { name, port, path: projPath, command, group, description, memoryLimitMB } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+
+    const reg = registry.ensureRegistry();
+    const validationError = registry.validateRegistration(reg, name, { port, path: projPath });
+    if (validationError) return res.status(400).json({ error: validationError });
+
+    reg.projects[name] = {
+      port: parseInt(port),
+      path: projPath || '',
+      command: command || 'npm run dev',
+      group: group || 'apps',
+      description: description || '',
+      memoryLimitMB: parseInt(memoryLimitMB) || 1024,
+    };
+    registry.writeRegistry(reg);
+    res.json({ success: true, project: reg.projects[name] });
+  });
+
+  // Remove a project
+  app.delete('/api/register/:name', (req, res) => {
+    const reg = registry.ensureRegistry();
+    if (!reg.projects[req.params.name]) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    delete reg.projects[req.params.name];
+    registry.writeRegistry(reg);
+    res.json({ success: true });
+  });
+
+  // Kill a project's process tree by name
+  app.post('/api/kill-project/:name', async (req, res) => {
+    const reg = registry.ensureRegistry();
+    const proj = reg.projects[req.params.name];
+    if (!proj) return res.status(404).json({ error: 'Project not found' });
+
+    const pid = registry.getPidOnPort(proj.port);
+    if (!pid) return res.status(404).json({ error: 'Process not running' });
+
+    treeKill(pid, 'SIGTERM', (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      // Follow up with SIGKILL after 2s if still alive
+      setTimeout(() => {
+        try { process.kill(pid, 0); treeKill(pid, 'SIGKILL'); } catch {}
+      }, 2000);
+      res.json({ success: true, pid, project: req.params.name });
+    });
+  });
+
+  // Kill a rogue process by port
+  app.post('/api/kill-port/:port', (req, res) => {
+    const port = parseInt(req.params.port);
+    if (isNaN(port)) return res.status(400).json({ error: 'Invalid port' });
+
+    const pid = registry.getPidOnPort(port);
+    if (!pid) return res.status(404).json({ error: 'No process on port' });
+
+    treeKill(pid, 'SIGTERM', (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      setTimeout(() => {
+        try { process.kill(pid, 0); treeKill(pid, 'SIGKILL'); } catch {}
+      }, 2000);
+      res.json({ success: true, pid, port });
+    });
+  });
+
+  // Scan build caches
+  app.get('/api/caches', (req, res) => {
+    const reg = registry.ensureRegistry();
+    const caches = registry.scanCaches(reg);
+    const totalMB = Object.values(caches).reduce((sum, c) => sum + c.totalMB, 0);
+    res.json({ caches, totalMB });
+  });
+
+  // Clean caches for a project
+  app.post('/api/clean/:name', (req, res) => {
+    const reg = registry.ensureRegistry();
+    const result = registry.cleanProjectCaches(reg, req.params.name);
+    if (result.error) return res.status(404).json(result);
+    res.json(result);
+  });
+
+  // Sync PORT= into all .env files
+  app.post('/api/sync-all-envs', (req, res) => {
+    const reg = registry.ensureRegistry();
+    const results = registry.syncAllEnvs(reg);
+    res.json({ results });
   });
 
   // Rolling history buffer

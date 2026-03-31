@@ -11,6 +11,7 @@
   "license": "MIT",
   "dependencies": {
     "express": "^4.21.0",
+    "tree-kill": "^1.2.2",
     "ws": "^8.18.0"
   }
 }
