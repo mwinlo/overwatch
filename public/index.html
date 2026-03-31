@@ -197,6 +197,98 @@
       padding: 2px 8px; border-radius: 4px;
     }
 
+    /* RAM Alert Banner */
+    #ram-alert-banner {
+      display: none;
+      background: linear-gradient(90deg, #dc2626, #991b1b);
+      color: white;
+      text-align: center;
+      padding: 10px 24px;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 0.5px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    #ram-alert-banner.visible {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      animation: alert-flash 0.6s ease-in-out infinite alternate;
+    }
+    @keyframes alert-flash {
+      0% { opacity: 1; background: linear-gradient(90deg, #dc2626, #991b1b); }
+      100% { opacity: 0.85; background: linear-gradient(90deg, #b91c1c, #7f1d1d); }
+    }
+    .alert-icon { font-size: 18px; }
+    .alert-dismiss {
+      background: rgba(255,255,255,0.2);
+      border: none;
+      color: white;
+      border-radius: 4px;
+      padding: 2px 10px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      cursor: pointer;
+      margin-left: 12px;
+    }
+    .alert-dismiss:hover { background: rgba(255,255,255,0.3); }
+
+    /* Session card danger states */
+    .session-card.ram-spike {
+      border-color: var(--red);
+      animation: card-danger-pulse 1s ease-in-out infinite alternate;
+      box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+    }
+    .session-card.ram-warning {
+      border-color: var(--amber);
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);
+    }
+    @keyframes card-danger-pulse {
+      0% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.3); border-color: var(--red); }
+      100% { box-shadow: 0 0 30px rgba(239, 68, 68, 0.6); border-color: #f87171; }
+    }
+
+    /* Rate-of-change badge */
+    .ram-rate-badge {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+      margin-left: 8px;
+    }
+    .ram-rate-badge.rising {
+      background: rgba(245, 158, 11, 0.2);
+      color: var(--amber);
+    }
+    .ram-rate-badge.surging {
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--red);
+      animation: badge-blink 0.5s ease-in-out infinite alternate;
+    }
+    @keyframes badge-blink {
+      0% { opacity: 1; }
+      100% { opacity: 0.5; }
+    }
+
+    /* Adaptive polling indicator */
+    .fast-poll-indicator {
+      display: none;
+      background: var(--amber);
+      color: #000;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 11px;
+      padding: 2px 10px;
+      border-radius: 10px;
+    }
+    .fast-poll-indicator.visible { display: inline-block; }
+
     /* Footer */
     .footer {
       text-align: center; padding: 16px;
@@ -205,6 +297,11 @@
   </style>
 </head>
 <body>
+  <div id="ram-alert-banner">
+    <span class="alert-icon">&#9888;</span>
+    <span id="ram-alert-text">RAM ALERT</span>
+    <button class="alert-dismiss" onclick="dismissAlert()">Dismiss</button>
+  </div>
   <div id="reconnect-banner">Connection lost - reconnecting...</div>
 
   <header class="header">
@@ -213,6 +310,7 @@
       <span class="header-title">OVERWATCH</span>
     </div>
     <div class="header-right">
+      <span class="fast-poll-indicator" id="fast-poll-badge">FAST POLL</span>
       <span id="last-updated">Connecting...</span>
       <span class="session-badge" id="session-count">0 sessions</span>
     </div>
@@ -271,7 +369,7 @@
   </div>
 
   <footer class="footer">
-    Polling every 3s &bull; Storing 20min history &bull; Port 4040
+    Polling 3s (500ms under pressure) &bull; 20min history &bull; Auto-kill at 80% RAM &bull; Port 4040
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -348,11 +446,49 @@
     }
 
     // ============================================================
+    // RAM ALERT SYSTEM
+    // ============================================================
+    var alertDismissed = false;
+    var currentAlerts = [];
+
+    function updateAlerts(alerts) {
+      currentAlerts = alerts || [];
+      var banner = document.getElementById('ram-alert-banner');
+      var textEl = document.getElementById('ram-alert-text');
+
+      var critical = currentAlerts.filter(function(a) { return a.level === 'critical'; });
+
+      if (critical.length > 0 && !alertDismissed) {
+        textEl.textContent = critical[0].message;
+        if (critical.length > 1) {
+          textEl.textContent += ' (+' + (critical.length - 1) + ' more)';
+        }
+        banner.classList.add('visible');
+      } else {
+        banner.classList.remove('visible');
+      }
+
+      // Reset dismiss when alerts clear
+      if (critical.length === 0) alertDismissed = false;
+
+      // Fast-poll indicator
+      var fastBadge = document.getElementById('fast-poll-badge');
+      var hasSpike = currentAlerts.some(function(a) { return a.type === 'ram_spike' || a.type === 'low_ram'; });
+      fastBadge.classList.toggle('visible', hasSpike);
+    }
+
+    function dismissAlert() {
+      alertDismissed = true;
+      document.getElementById('ram-alert-banner').classList.remove('visible');
+    }
+
+    // ============================================================
     // DASHBOARD UPDATE (called on each WS message)
     // ============================================================
     function updateDashboard(data) {
       var current = data.current;
       var history = data.history;
+      updateAlerts(data.alerts);
       updateHealthStrip(current.system, current.sessions);
       updateCharts(history);
       renderSessionCards(current.sessions);
