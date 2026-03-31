@@ -22,12 +22,13 @@ Open [http://localhost:4040](http://localhost:4040)
 
 ### System Health Strip
 
-Four cards across the top showing real-time system-wide metrics:
+Five cards across the top showing real-time system-wide metrics:
 
 - **RAM Usage** — Total used vs total available, with a color-coded progress bar (green < 70%, amber 70-85%, red > 85%)
 - **Claude RAM** — How much of your system RAM is consumed by Claude Code sessions specifically
 - **CPU Load** — 1-minute load average normalized to your core count
 - **Sessions** — Count of active Claude Code CLI processes
+- **Total Tokens** — Aggregate input/output tokens and estimated cost across all sessions
 
 ### Historical Charts
 
@@ -38,7 +39,7 @@ Two time-series charts showing the last 20 minutes of data:
 
 ### Session Cards
 
-One card per active Claude Code session, sorted by memory usage (highest first). Each card shows:
+One card per active Claude Code session, with a sort toggle (oldest first or by memory). Each card shows:
 
 - **Status dot** — Green (< 2 GB), amber (2-4 GB), red (> 4 GB)
 - **Project label** — Derived from the session's working directory
@@ -51,6 +52,41 @@ One card per active Claude Code session, sorted by memory usage (highest first).
 - **Kill button** — Two-click confirmation: first click shows "Confirm Kill?", second click sends SIGTERM (then SIGKILL after 2 seconds if needed)
 
 When no Claude Code sessions are running, an empty state message is shown instead.
+
+### Alert System
+
+Overwatch has a layered alert system that catches dangerous memory growth at every speed:
+
+| Alert | Trigger | Speed | Level | Visual |
+|-------|---------|-------|-------|--------|
+| `ram_spike` | Single poll >0.5 GB/s | ~3s | Critical | Red pulsing card border |
+| `ram_burst` | 3-poll avg >0.2 GB/s | ~9s | Critical | Red pulsing card + **BURST** badge |
+| `ram_runaway` | Projected ceiling hit <2min | ~15s | Warning | Amber pulsing card + **CEILING IN Xs** countdown |
+| `ram_ceiling` | Session at ≥80% of total RAM | 3s | Critical | Auto-kill fires |
+| `low_ram` | System available RAM <2 GB | 3s | Warning | Fast polling activated |
+| `session_exited` | Session disappeared between polls | 3s | Warning | Amber banner + tombstone card (30s) |
+
+When any critical or burst alert fires, an alert banner appears at the top of the dashboard. Runaway and exit alerts show an amber banner. All alert types (spike, burst, runaway) trigger fast polling at 500ms.
+
+**Session exit detection** — When a session dies or is killed, a fading tombstone card shows its last-known metrics (memory, uptime) with an "EXITED" badge for 30 seconds, so you always know what happened.
+
+**Runaway projection** — Tracks each session's memory over a 30-second sliding window (10 polls). If the average growth rate projects a ceiling breach within 2 minutes, the card shows a live countdown badge.
+
+**Burst detection** — Catches the middle ground between single-poll spikes and long-term runaway: if the average growth rate over 3 polls exceeds 0.2 GB/s, a critical burst alert fires immediately.
+
+### RAM Protection
+
+When a session's tree memory exceeds the RAM ceiling (default 80% of total RAM), Overwatch auto-kills it:
+
+1. Sends `SIGTERM` to the session PID
+2. Waits 2 seconds
+3. Sends `SIGKILL` if the process is still alive
+
+Auto-killed sessions are logged to the console and shown as exited tombstone cards on the dashboard.
+
+### Adaptive Polling
+
+Normal polling runs every 3 seconds. Under pressure (low system RAM, spike, burst, or runaway detected), polling accelerates to 500ms for faster response. It returns to 3 seconds when conditions normalize.
 
 ### Connection Status
 
@@ -66,7 +102,11 @@ Browser (index.html)  <──WebSocket──>  server.js  ──calls──>  mo
                                            │                      │
                                       Express:4040          macOS commands:
                                       POST /api/kill/:pid     ps, vm_stat,
-                                                              sysctl, lsof
+                                           │                  sysctl, lsof
+                                      alerts.js
+                                        detectAlerts()
+                                        detectBurst()
+                                        detectRunaway()
 ```
 
 ### Metrics Collection (`monitor.js`)
@@ -85,12 +125,23 @@ Every 3 seconds, the server calls `collectAll()` which:
 
 All system commands run without sudo. If any individual metric fails (e.g., `lsof` lacking permissions), that metric is silently skipped and shown as "—" in the UI.
 
+### Alert Detection (`alerts.js`)
+
+Three pure functions, extracted for testability:
+
+- **`detectAlerts(current, prev, opts)`** — Compares two consecutive snapshots. Detects single-poll RAM spikes, ceiling breaches, low system RAM, and session exits.
+- **`detectBurst(current, growthTracker, opts)`** — Checks a short window (last 3 samples) for averaged growth exceeding the burst threshold. Fires critical alert before runaway can accumulate enough samples.
+- **`detectRunaway(current, growthTracker, opts)`** — Checks a longer window (10 samples, ~30s) and projects time-to-ceiling based on average growth rate. Fires warning when breach is projected within the horizon.
+
 ### Server (`server.js`)
 
 - **Express** serves the `public/` directory as static files
-- **WebSocket** broadcasts the full metrics payload to all connected browsers every 3 seconds
+- **WebSocket** broadcasts the full metrics payload (including alerts and exited session tombstones) to all connected browsers every 3 seconds
 - **History buffer** stores the last 400 data points (20 minutes at 3-second intervals) in memory for the time-series charts
+- **Growth tracker** maintains a per-session rolling window of memory samples (last 10 polls) for burst and runaway detection
+- **Exited session tracker** keeps tombstone data for recently exited sessions (30-second TTL)
 - **Kill endpoint** (`POST /api/kill/:pid`) validates the PID belongs to a Claude CLI process, sends SIGTERM, waits 2 seconds, then sends SIGKILL if the process is still alive
+- **Auto-kill** terminates any session exceeding the RAM ceiling on each poll cycle
 
 ### Frontend (`public/index.html`)
 
@@ -104,7 +155,12 @@ A single HTML file with inlined CSS and JavaScript — no build step, no framewo
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT`   | `4040`  | Server port |
+| `PORT` | `4040` | Server port |
+| `OW_RAM_CEILING_PCT` | `80` | Auto-kill session above this % of total RAM |
+| `OW_RAM_SPIKE_GB_S` | `0.5` | Single-poll spike threshold (GB/s) |
+| `OW_RAM_PRESSURE_GB` | `2` | Switch to fast polling when available RAM drops below this (GB) |
+| `OW_RUNAWAY_HORIZON_SEC` | `120` | Runaway alert fires when ceiling is projected within this many seconds |
+| `OW_BURST_GB_S` | `0.2` | Burst alert threshold — avg growth rate over 3 polls (GB/s) |
 
 ## Testing
 
@@ -112,7 +168,10 @@ A single HTML file with inlined CSS and JavaScript — no build step, no framewo
 npm test
 ```
 
-Runs 21 tests covering:
+Runs 45 tests covering:
+- Alert detection: spike, burst, runaway, ceiling, low RAM, session exit
+- Burst detection: threshold, minimum samples, flat/shrinking memory, windowing
+- Runaway detection: ceiling projection, slow growth, shrinking, minimum samples, annotation
 - Parsing utilities for `vm_stat`, `ps`, and load average output
 - Process tree building and descendant discovery
 - System metrics collection (live smoke tests)
