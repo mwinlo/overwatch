@@ -189,6 +189,38 @@
     .kill-btn:hover { box-shadow: 0 0 16px rgba(220, 38, 38, 0.4); }
     .kill-btn.confirming { background: #991b1b; }
 
+    /* Exited Session Tombstone */
+    .session-card.exited {
+      opacity: 0.45;
+      border-color: var(--red);
+      border-style: dashed;
+      position: relative;
+      animation: tombstone-fade 30s ease-out forwards;
+    }
+    .session-card.exited .status-dot { background: var(--red) !important; }
+    .exited-badge {
+      display: inline-block;
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--red);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      letter-spacing: 1px;
+      margin-left: 8px;
+    }
+    .exited-time {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+    @keyframes tombstone-fade {
+      0% { opacity: 0.6; }
+      80% { opacity: 0.35; }
+      100% { opacity: 0; }
+    }
+
     /* Empty State */
     .empty-state { text-align: center; padding: 80px 24px; color: var(--text-secondary); }
     .empty-state p { font-size: 16px; margin-bottom: 8px; }
@@ -246,6 +278,54 @@
     .session-card.ram-warning {
       border-color: var(--amber);
       box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);
+    }
+    .session-card.ram-burst {
+      border-color: var(--red);
+      animation: burst-pulse 0.6s ease-in-out infinite alternate;
+      box-shadow: 0 0 24px rgba(239, 68, 68, 0.4);
+    }
+    @keyframes burst-pulse {
+      0% { box-shadow: 0 0 24px rgba(239, 68, 68, 0.4); border-color: var(--red); }
+      100% { box-shadow: 0 0 36px rgba(239, 68, 68, 0.7); border-color: #f87171; }
+    }
+    .burst-badge {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 10px;
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--red);
+      letter-spacing: 0.5px;
+      animation: badge-blink 0.4s ease-in-out infinite alternate;
+    }
+    .session-card.ram-runaway {
+      border-color: var(--amber);
+      animation: runaway-pulse 1.2s ease-in-out infinite alternate;
+      box-shadow: 0 0 16px rgba(245, 158, 11, 0.3);
+    }
+    @keyframes runaway-pulse {
+      0% { box-shadow: 0 0 16px rgba(245, 158, 11, 0.3); border-color: var(--amber); }
+      100% { box-shadow: 0 0 28px rgba(245, 158, 11, 0.5); border-color: #fbbf24; }
+    }
+
+    /* Countdown badge for runaway sessions */
+    .ceiling-countdown {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 10px;
+      background: rgba(245, 158, 11, 0.2);
+      color: var(--amber);
+      letter-spacing: 0.5px;
+    }
+    .ceiling-countdown.imminent {
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--red);
+      animation: badge-blink 0.5s ease-in-out infinite alternate;
     }
     @keyframes card-danger-pulse {
       0% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.3); border-color: var(--red); }
@@ -456,25 +536,39 @@
       var banner = document.getElementById('ram-alert-banner');
       var textEl = document.getElementById('ram-alert-text');
 
+      // Priority: critical > runaway > exited
       var critical = currentAlerts.filter(function(a) { return a.level === 'critical'; });
+      var runaway = currentAlerts.filter(function(a) { return a.type === 'ram_runaway'; });
+      var exitAlerts = currentAlerts.filter(function(a) { return a.type === 'session_exited'; });
 
-      if (critical.length > 0 && !alertDismissed) {
-        textEl.textContent = critical[0].message;
-        if (critical.length > 1) {
-          textEl.textContent += ' (+' + (critical.length - 1) + ' more)';
+      var bannerAlerts = critical.length > 0 ? critical : (runaway.length > 0 ? runaway : exitAlerts);
+
+      if (bannerAlerts.length > 0 && !alertDismissed) {
+        textEl.textContent = bannerAlerts[0].message;
+        if (bannerAlerts.length > 1) {
+          textEl.textContent += ' (+' + (bannerAlerts.length - 1) + ' more)';
         }
         banner.classList.add('visible');
+        // Amber background for runaway and exit alerts
+        if (critical.length > 0) {
+          banner.style.background = '';
+        } else {
+          banner.style.background = 'linear-gradient(90deg, #d97706, #92400e)';
+        }
       } else {
         banner.classList.remove('visible');
+        banner.style.background = '';
       }
 
       // Reset dismiss when alerts clear
-      if (critical.length === 0) alertDismissed = false;
+      if (bannerAlerts.length === 0) alertDismissed = false;
 
       // Fast-poll indicator
       var fastBadge = document.getElementById('fast-poll-badge');
-      var hasSpike = currentAlerts.some(function(a) { return a.type === 'ram_spike' || a.type === 'low_ram'; });
-      fastBadge.classList.toggle('visible', hasSpike);
+      var hasPressure = currentAlerts.some(function(a) {
+        return a.type === 'ram_spike' || a.type === 'ram_burst' || a.type === 'low_ram' || a.type === 'ram_runaway';
+      });
+      fastBadge.classList.toggle('visible', hasPressure);
     }
 
     function dismissAlert() {
@@ -491,7 +585,7 @@
       updateAlerts(data.alerts);
       updateHealthStrip(current.system, current.sessions);
       updateCharts(history);
-      renderSessionCards(current.sessions);
+      renderSessionCards(current.sessions, data.exitedSessions || []);
     }
 
     // ============================================================
@@ -648,11 +742,12 @@
       return div.innerHTML;
     }
 
-    function renderSessionCards(sessions) {
+    function renderSessionCards(sessions, exitedSessions) {
       var grid = document.getElementById('sessions-grid');
       var emptyState = document.getElementById('empty-state');
+      var exited = exitedSessions || [];
 
-      if (sessions.length === 0) {
+      if (sessions.length === 0 && exited.length === 0) {
         grid.innerHTML = '';
         emptyState.style.display = 'block';
         return;
@@ -666,12 +761,42 @@
           : function(a, b) { return a.pid - b.pid; }
       );
 
-      grid.innerHTML = sorted.map(function(s) {
+      // Build lookup of alert PIDs for card styling (burst > runaway priority)
+      var burstPids = {};
+      var runawayPids = {};
+      currentAlerts.forEach(function(a) {
+        if (a.type === 'ram_burst') burstPids[a.pid] = a;
+        if (a.type === 'ram_runaway') runawayPids[a.pid] = a;
+      });
+
+      // Build live session cards (all values from trusted server data, escaped via escapeHtml)
+      var html = sorted.map(function(s) {
         var memPct = Math.min(100, (s.treeRssGB / 8) * 100);
         var cpuPct = Math.min(100, s.cpuPercent);
         var isConfirming = !!killTimers[s.pid];
+        var isBurst = !!burstPids[s.pid];
+        var isRunaway = !!runawayPids[s.pid];
+        // Burst takes priority over runaway for card styling
+        var cardClass = 'session-card' + (isBurst ? ' ram-burst' : (isRunaway ? ' ram-runaway' : ''));
 
-        return '<div class="session-card" id="card-' + s.pid + '">'
+        // Status badges for dangerous sessions
+        var statusBadgeHtml = '';
+        if (isBurst) {
+          var ba = burstPids[s.pid];
+          statusBadgeHtml = '<div style="margin-bottom:12px">'
+            + '<span class="burst-badge">BURST +' + ba.growthGB + ' GB / ' + ba.windowSec + 's</span>'
+            + '</div>';
+        } else if (isRunaway) {
+          var secLeft = runawayPids[s.pid].secToCeiling;
+          var countdownText = secLeft < 60 ? secLeft + 's' : (secLeft / 60).toFixed(1) + 'm';
+          var imminentClass = secLeft < 30 ? ' imminent' : '';
+          statusBadgeHtml = '<div style="margin-bottom:12px">'
+            + '<span class="ceiling-countdown' + imminentClass + '">CEILING IN ' + countdownText + '</span>'
+            + '</div>';
+        }
+
+        return '<div class="' + cardClass + '" id="card-' + s.pid + '">'
+          + statusBadgeHtml
           + '<div class="session-header">'
           +   '<span class="session-label">'
           +     '<span class="status-dot" style="background:' + statusColor(s.treeRssGB) + '"></span>'
@@ -699,6 +824,32 @@
           + '<div style="clear:both"></div>'
           + '</div>';
       }).join('');
+
+      // Tombstone cards for recently exited sessions (all values from trusted server, escaped)
+      if (exited.length > 0) {
+        html += exited.map(function(e) {
+          var ago = Math.round((Date.now() - e.exitedAt) / 1000);
+          var agoText = ago < 60 ? ago + 's ago' : Math.round(ago / 60) + 'm ago';
+          return '<div class="session-card exited">'
+            + '<div class="session-header">'
+            +   '<span class="session-label">'
+            +     '<span class="status-dot"></span>'
+            +     escapeHtml(e.label)
+            +     '<span class="exited-badge">EXITED</span>'
+            +   '</span>'
+            +   '<span class="session-pid">PID ' + e.pid + '</span>'
+            + '</div>'
+            + '<div class="session-path">' + escapeHtml(e.workingDir) + '</div>'
+            + '<div class="session-metrics">'
+            +   '<div class="metric"><span class="metric-label">Last Memory</span><span class="metric-value">' + e.treeRssGB + ' GB</span></div>'
+            +   '<div class="metric"><span class="metric-label">Uptime was</span><span class="metric-value">' + escapeHtml(e.elapsed) + '</span></div>'
+            + '</div>'
+            + '<div class="exited-time">Exited ' + agoText + '</div>'
+            + '</div>';
+        }).join('');
+      }
+
+      grid.innerHTML = html;
     }
 
     function handleKill(pid, btn) {
