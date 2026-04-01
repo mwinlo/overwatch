@@ -119,6 +119,8 @@ function createServer(port = DEFAULT_PORT) {
       memoryLimitMB: parseInt(memoryLimitMB) || 1024,
     };
     registry.writeRegistry(reg);
+    // Auto-sync PORT into the project's env files
+    registry.syncEnvPort(reg, name);
     res.json({ success: true, project: reg.projects[name] });
   });
 
@@ -201,6 +203,9 @@ function createServer(port = DEFAULT_PORT) {
     const portInUse = await registry.checkPort(proj.port);
     if (portInUse) return res.status(409).json({ error: 'Port ' + proj.port + ' is already in use' });
 
+    // Sync PORT into env files before spawning
+    registry.syncEnvPort(reg, req.params.name);
+
     // Ensure log directory exists
     const logDir = path.join(os.homedir(), '.overwatch', 'logs');
     fs.mkdirSync(logDir, { recursive: true });
@@ -213,6 +218,7 @@ function createServer(port = DEFAULT_PORT) {
       shell: true,
       detached: true,
       stdio: ['ignore', logStream, logStream],
+      env: { ...process.env, PORT: String(proj.port) },
     });
     child.unref();
     fs.closeSync(logStream);

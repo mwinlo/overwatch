@@ -209,9 +209,15 @@ async function getProjectStatuses(registry, excludePids) {
 
 // Scan for rogue processes on ports in our range but not registered
 async function findRogueProcesses(registry) {
-  const registeredPorts = new Set(
-    Object.values(registry.projects).map(p => p.port)
-  );
+  const registeredPorts = new Set();
+  for (const proj of Object.values(registry.projects)) {
+    registeredPorts.add(proj.port);
+    if (proj.services) {
+      for (const port of Object.values(proj.services)) {
+        registeredPorts.add(port);
+      }
+    }
+  }
 
   const rogues = [];
   const ports = [];
@@ -305,23 +311,15 @@ function cleanProjectCaches(registry, projectName) {
 }
 
 // Sync PORT= into project .env files
-function syncEnvPort(registry, projectName) {
-  const proj = registry.projects[projectName];
-  if (!proj) return { error: 'Project not found' };
-
-  const projPath = expandPath(proj.path);
-  if (!fs.existsSync(projPath)) {
-    return { project: projectName, synced: false, reason: 'path does not exist' };
-  }
-
-  const envPath = path.join(projPath, '.env');
-  const portLine = `PORT=${proj.port}`;
+function syncEnvFile(filePath, port) {
+  const portLine = `PORT=${port}`;
   let content = '';
 
   try {
-    content = fs.readFileSync(envPath, 'utf8');
+    content = fs.readFileSync(filePath, 'utf8');
   } catch {
-    // No .env yet — create it
+    // File doesn't exist — skip rather than create
+    return false;
   }
 
   const lines = content.split('\n');
@@ -338,8 +336,29 @@ function syncEnvPort(registry, projectName) {
     updated.unshift(portLine);
   }
 
-  fs.writeFileSync(envPath, updated.join('\n'), 'utf8');
-  return { project: projectName, synced: true, port: proj.port };
+  fs.writeFileSync(filePath, updated.join('\n'), 'utf8');
+  return true;
+}
+
+function syncEnvPort(registry, projectName) {
+  const proj = registry.projects[projectName];
+  if (!proj) return { error: 'Project not found' };
+
+  const projPath = expandPath(proj.path);
+  if (!fs.existsSync(projPath)) {
+    return { project: projectName, synced: false, reason: 'path does not exist' };
+  }
+
+  // Sync PORT into both .env and .env.local (Next.js reads .env.local first)
+  const synced = [];
+  for (const filename of ['.env', '.env.local']) {
+    const filePath = path.join(projPath, filename);
+    if (syncEnvFile(filePath, proj.port)) {
+      synced.push(filename);
+    }
+  }
+
+  return { project: projectName, synced: synced.length > 0, files: synced, port: proj.port };
 }
 
 function syncAllEnvs(registry) {
@@ -350,6 +369,20 @@ function syncAllEnvs(registry) {
   return results;
 }
 
+// Get all ports claimed by the registry (primary + services)
+function getAllClaimedPorts(registry) {
+  const claimed = new Map(); // port → "projectName" or "projectName/serviceName"
+  for (const [name, proj] of Object.entries(registry.projects)) {
+    claimed.set(proj.port, name);
+    if (proj.services) {
+      for (const [svc, port] of Object.entries(proj.services)) {
+        claimed.set(port, name + '/' + svc);
+      }
+    }
+  }
+  return claimed;
+}
+
 function validateRegistration(registry, name, data) {
   if (!data.port || !data.path) {
     return 'port and path are required';
@@ -358,10 +391,10 @@ function validateRegistration(registry, name, data) {
   if (isNaN(port) || port < 1024 || port > 65535) {
     return 'port must be 1024-65535';
   }
-  for (const [existingName, proj] of Object.entries(registry.projects)) {
-    if (existingName !== name && proj.port === port) {
-      return `port ${port} already assigned to ${existingName}`;
-    }
+  const claimed = getAllClaimedPorts(registry);
+  const owner = claimed.get(port);
+  if (owner && owner !== name && !owner.startsWith(name + '/')) {
+    return `port ${port} already assigned to ${owner}`;
   }
   return null;
 }
@@ -376,6 +409,7 @@ module.exports = {
   writeRegistry,
   ensureRegistry,
   checkPort,
+  getAllClaimedPorts,
   getPidOnPort,
   getProcessStats,
   getTreeRssMB,

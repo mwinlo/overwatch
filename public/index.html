@@ -464,6 +464,22 @@
       transition: width 0.5s ease, background 0.3s ease;
     }
 
+    .port-card-services {
+      margin: 10px 0; padding: 8px 10px;
+      background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.15);
+      border-radius: 6px; font-family: var(--font-mono); font-size: 12px;
+    }
+    .port-card-services-title {
+      font-size: 11px; font-weight: 600; color: var(--blue);
+      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
+    }
+    .port-card-service-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 3px 0; color: var(--text-secondary);
+    }
+    .port-card-service-row .svc-port { color: var(--blue); font-weight: 600; }
+    .port-card-service-row .svc-pid { color: var(--text-secondary); font-size: 11px; }
+
     .port-card-actions {
       display: flex; gap: 8px; justify-content: flex-end;
     }
@@ -1085,7 +1101,7 @@
         .catch(function() {});
     }
 
-    function buildPortCard(p, name) {
+    function buildPortCard(p, name, relatedServices) {
       var card = document.createElement('div');
       var cardClass = 'port-card';
       var badgeClass = 'port-status-badge';
@@ -1161,6 +1177,33 @@
         limitText.style.cssText = 'font-size:11px;color:var(--text-secondary);font-family:var(--font-mono);margin-bottom:14px';
         limitText.textContent = p.treeRssMB + ' / ' + p.memoryLimitMB + ' MB (' + p.memoryPct + '%)';
         card.appendChild(limitText);
+      }
+
+      // Sub-services (related processes on other ports)
+      if (relatedServices && relatedServices.length > 0) {
+        var svcBox = document.createElement('div');
+        svcBox.className = 'port-card-services';
+        var svcTitle = document.createElement('div');
+        svcTitle.className = 'port-card-services-title';
+        svcTitle.textContent = 'Services';
+        svcBox.appendChild(svcTitle);
+        relatedServices.forEach(function(svc) {
+          var row = document.createElement('div');
+          row.className = 'port-card-service-row';
+          var portSpan = document.createElement('span');
+          portSpan.className = 'svc-port';
+          portSpan.textContent = ':' + svc.port;
+          var memSpan = document.createElement('span');
+          memSpan.textContent = svc.rssMB + ' MB';
+          var pidSpan = document.createElement('span');
+          pidSpan.className = 'svc-pid';
+          pidSpan.textContent = 'PID ' + (svc.pid || '?');
+          row.appendChild(portSpan);
+          row.appendChild(memSpan);
+          row.appendChild(pidSpan);
+          svcBox.appendChild(row);
+        });
+        card.appendChild(svcBox);
       }
 
       // Actions
@@ -1246,6 +1289,19 @@
       return card;
     }
 
+    var lastPortMapStructure = '';
+
+    function getPortMapStructure(data) {
+      // Only track what requires a full rebuild: which projects exist, running state, rogue ports
+      var parts = [];
+      Object.keys(data.projects).sort().forEach(function(name) {
+        var p = data.projects[name];
+        parts.push(name + ':' + p.port + ':' + p.running + ':' + p.pid);
+      });
+      (data.rogues || []).forEach(function(r) { parts.push('rogue:' + r.port + ':' + r.pid); });
+      return parts.join('|');
+    }
+
     function renderPortMap(data) {
       var projects = data.projects;
       var rogues = data.rogues;
@@ -1257,6 +1313,12 @@
         ? (summary.totalMemMB / 1024).toFixed(1) + ' GB' : summary.totalMemMB + ' MB';
       document.getElementById('pm-rogue-count').textContent = summary.rogueCount;
       document.getElementById('pm-rogue-count').style.color = summary.rogueCount > 0 ? 'var(--red)' : '';
+
+      // Only rebuild cards when structure changes (new/removed projects, state changes)
+      // Metric updates (CPU, memory) are not worth a full rebuild
+      var structure = getPortMapStructure(data);
+      if (structure === lastPortMapStructure) return;
+      lastPortMapStructure = structure;
 
       var names = Object.keys(projects);
       var grid = document.getElementById('portmap-grid');
