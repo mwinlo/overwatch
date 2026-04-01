@@ -1,7 +1,9 @@
 const express = require('express');
 const http = require('http');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, spawn, execFile } = require('child_process');
+const fs = require('fs');
+const os = require('os');
 const { WebSocketServer } = require('ws');
 const WebSocket = require('ws');
 const treeKill = require('tree-kill');
@@ -59,6 +61,9 @@ function createServer(port = DEFAULT_PORT) {
     }
   });
 
+  // ---- Start button: track spawned PIDs ----
+  const spawnedPids = new Map(); // name → pid
+
   // ---- Dev Registry API ----
   // Ensure registry exists on startup
   registry.ensureRegistry();
@@ -69,8 +74,13 @@ function createServer(port = DEFAULT_PORT) {
   app.get('/api/status', async (req, res) => {
     try {
       const reg = registry.ensureRegistry();
+      // Clean up dead spawned PIDs so the exclude list doesn't grow forever
+      for (const [name, pid] of spawnedPids) {
+        try { process.kill(pid, 0); } catch { spawnedPids.delete(name); }
+      }
+      const excludePids = Array.from(spawnedPids.values());
       const [projects, rogues] = await Promise.all([
-        registry.getProjectStatuses(reg),
+        registry.getProjectStatuses(reg, excludePids),
         registry.findRogueProcesses(reg),
       ]);
 
@@ -182,6 +192,58 @@ function createServer(port = DEFAULT_PORT) {
     res.json({ results });
   });
 
+  // Start a project's dev server and open browser when port responds
+  app.post('/api/start/:name', async (req, res) => {
+    const reg = registry.ensureRegistry();
+    const proj = reg.projects[req.params.name];
+    if (!proj) return res.status(404).json({ error: 'Project not found' });
+
+    const portInUse = await registry.checkPort(proj.port);
+    if (portInUse) return res.status(409).json({ error: 'Port ' + proj.port + ' is already in use' });
+
+    // Ensure log directory exists
+    const logDir = path.join(os.homedir(), '.overwatch', 'logs');
+    fs.mkdirSync(logDir, { recursive: true });
+    const logFile = path.join(logDir, req.params.name + '.log');
+    const logStream = fs.openSync(logFile, 'w');
+
+    const expandedPath = registry.expandPath(proj.path);
+    const child = spawn(proj.command, {
+      cwd: expandedPath,
+      shell: true,
+      detached: true,
+      stdio: ['ignore', logStream, logStream],
+    });
+    child.unref();
+    fs.closeSync(logStream);
+
+    spawnedPids.set(req.params.name, child.pid);
+
+    // Poll for port to come alive
+    const pollInterval = 500;
+    const maxWait = 30000;
+    let elapsed = 0;
+    let opened = false;
+
+    while (elapsed < maxWait) {
+      await new Promise(r => setTimeout(r, pollInterval));
+      elapsed += pollInterval;
+      if (await registry.checkPort(proj.port)) {
+        execFile('open', ['http://localhost:' + proj.port], () => {});
+        opened = true;
+        break;
+      }
+    }
+
+    res.json({
+      success: true,
+      pid: child.pid,
+      port: proj.port,
+      opened,
+      ...(opened ? {} : { message: 'started but port not responding yet' }),
+    });
+  });
+
   // Rolling history buffer
   const history = [];
   let previousSnapshot = null;
@@ -203,7 +265,10 @@ function createServer(port = DEFAULT_PORT) {
 
   function autoKillOverCeiling(current) {
     const ceilingGB = current.system.totalRamGB * (RAM_CEILING_PCT / 100);
+    const myPid = process.pid;
     for (const session of current.sessions) {
+      // Never auto-kill ourselves — our tree RSS can be inflated by spawned dev servers
+      if (session.pid === myPid) continue;
       if (session.treeRssGB >= ceilingGB && !killedPids.has(session.pid)) {
         console.warn(`[OVERWATCH AUTO-KILL] PID ${session.pid} (${session.label}) at ${session.treeRssGB} GB — exceeds ${RAM_CEILING_PCT}% ceiling`);
         killedPids.add(session.pid);

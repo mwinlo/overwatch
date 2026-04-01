@@ -109,7 +109,7 @@ function getProcessStats(pid) {
 }
 
 // Get full process tree RSS for a PID (parent + all children)
-function getTreeRssMB(pid) {
+function getTreeRssMB(pid, excludePids) {
   try {
     const out = execFileSync('ps', ['-eo', 'pid,ppid,rss'], {
       encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'],
@@ -129,12 +129,17 @@ function getTreeRssMB(pid) {
       childrenOf.get(p.ppid).push(p);
     }
 
+    // Skip excluded PIDs and their entire subtrees (e.g. detached spawned processes
+    // that haven't been reparented yet)
+    const skip = excludePids ? new Set(excludePids) : new Set();
+
     let totalKB = 0;
     const root = procs.find(p => p.pid === pid);
     if (root) totalKB += root.rss;
 
     function addChildren(parentPid) {
       for (const child of (childrenOf.get(parentPid) || [])) {
+        if (skip.has(child.pid)) continue;
         totalKB += child.rss;
         addChildren(child.pid);
       }
@@ -148,7 +153,8 @@ function getTreeRssMB(pid) {
 }
 
 // Scan all registered projects for status
-async function getProjectStatuses(registry) {
+// excludePids: optional array of PIDs to exclude from tree RSS walks (e.g. detached spawned children)
+async function getProjectStatuses(registry, excludePids) {
   const projects = registry.projects;
   const results = {};
 
@@ -188,7 +194,7 @@ async function getProjectStatuses(registry) {
           info.cpuPercent = stats.cpuPercent;
           info.elapsed = stats.elapsed;
         }
-        info.treeRssMB = getTreeRssMB(pid);
+        info.treeRssMB = getTreeRssMB(pid, excludePids);
         if (proj.memoryLimitMB > 0) {
           info.memoryPct = Math.round((info.treeRssMB / proj.memoryLimitMB) * 100);
         }

@@ -479,6 +479,8 @@
     .port-action-btn.confirming { background: var(--kill-red); color: white; border-color: var(--kill-red); }
     .port-action-btn.clean { color: var(--amber); }
     .port-action-btn.clean:hover { background: rgba(245,158,11,0.1); border-color: var(--amber); }
+    .port-action-btn.start { color: var(--green); }
+    .port-action-btn.start:hover { background: rgba(34,197,94,0.1); border-color: var(--green); }
 
     .rogue-label {
       font-family: var(--font-mono); font-size: 13px; font-weight: 700;
@@ -1171,6 +1173,12 @@
         killBtn.textContent = isConfirm ? 'Confirm?' : 'Kill';
         killBtn.addEventListener('click', function() { handlePortKill(name, killBtn); });
         actions.appendChild(killBtn);
+      } else {
+        var startBtn = document.createElement('button');
+        startBtn.className = 'port-action-btn start';
+        startBtn.textContent = 'Start';
+        startBtn.addEventListener('click', function() { handlePortStart(name, startBtn); });
+        actions.appendChild(startBtn);
       }
       var cleanBtn = document.createElement('button');
       cleanBtn.className = 'port-action-btn clean';
@@ -1326,6 +1334,23 @@
           setTimeout(function() { btn.textContent = 'Clean'; btn.disabled = false; }, 2000);
         })
         .catch(function() { btn.textContent = 'Error'; btn.disabled = false; });
+    }
+
+    function handlePortStart(name, btn) {
+      btn.textContent = 'Starting...';
+      btn.disabled = true;
+      fetch('/api/start/' + encodeURIComponent(name), { method: 'POST' })
+        .then(function(res) {
+          if (!res.ok) return res.json().then(function(d) { throw new Error(d.error || 'Failed'); });
+          return res.json();
+        })
+        .then(function(data) {
+          btn.textContent = data.opened ? 'Opened' : 'Started';
+        })
+        .catch(function(err) {
+          btn.textContent = err.message || 'Error';
+          setTimeout(function() { btn.textContent = 'Start'; btn.disabled = false; }, 3000);
+        });
     }
 
     // ============================================================
