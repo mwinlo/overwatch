@@ -61,6 +61,23 @@ function createServer(port = DEFAULT_PORT) {
     }
   });
 
+  // Kill any user-owned process by PID (for resource hogs)
+  app.post('/api/kill-process/:pid', (req, res) => {
+    const pid = parseInt(req.params.pid);
+    if (isNaN(pid) || pid <= 1) return res.status(400).json({ error: 'Invalid PID' });
+
+    // Safety: don't kill ourselves
+    if (pid === process.pid) return res.status(403).json({ error: 'Cannot kill Overwatch' });
+
+    treeKill(pid, 'SIGTERM', (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      setTimeout(() => {
+        try { process.kill(pid, 0); treeKill(pid, 'SIGKILL'); } catch {}
+      }, 2000);
+      res.json({ success: true, pid });
+    });
+  });
+
   // ---- Start button: track spawned PIDs ----
   const spawnedPids = new Map(); // name → pid
 

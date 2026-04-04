@@ -6,8 +6,6 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const REGISTRY_PATH = path.join(os.homedir(), '.dev-registry.json');
-const PORT_RANGE_START = 3000;
-const PORT_RANGE_END = 3299;
 
 const DEFAULT_REGISTRY = {
   projects: {
@@ -207,8 +205,32 @@ async function getProjectStatuses(registry, excludePids) {
   return results;
 }
 
-// Scan for rogue processes on ports in our range but not registered
-async function findRogueProcesses(registry) {
+// Discover ALL TCP listening ports on the system via a single lsof call
+function getAllListeningPorts() {
+  try {
+    const out = execFileSync('lsof', ['-iTCP', '-sTCP:LISTEN', '-Pn'], {
+      encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const lines = out.trim().split('\n').slice(1); // skip header
+    const seen = new Map(); // port → { port, pid, command }
+    for (const line of lines) {
+      const portMatch = line.match(/:(\d+)\s+\(LISTEN\)/);
+      if (!portMatch) continue;
+      const port = parseInt(portMatch[1]);
+      if (seen.has(port)) continue;
+      const parts = line.trim().split(/\s+/);
+      const command = parts[0];
+      const pid = parseInt(parts[1]);
+      if (!isNaN(pid)) seen.set(port, { port, pid, command });
+    }
+    return Array.from(seen.values());
+  } catch {
+    return [];
+  }
+}
+
+// Scan for rogue processes — any listening port not in the registry
+function findRogueProcesses(registry) {
   const registeredPorts = new Set();
   for (const proj of Object.values(registry.projects)) {
     registeredPorts.add(proj.port);
@@ -219,31 +241,20 @@ async function findRogueProcesses(registry) {
     }
   }
 
+  const allPorts = getAllListeningPorts();
   const rogues = [];
-  const ports = [];
-  for (let p = PORT_RANGE_START; p <= PORT_RANGE_END; p++) {
-    if (!registeredPorts.has(p)) ports.push(p);
-  }
 
-  // Check in batches of 50 to avoid fd exhaustion
-  const BATCH = 50;
-  for (let i = 0; i < ports.length; i += BATCH) {
-    const batch = ports.slice(i, i + BATCH);
-    const results = await Promise.all(batch.map(p => checkPort(p)));
-    for (let j = 0; j < batch.length; j++) {
-      if (results[j]) {
-        const pid = getPidOnPort(batch[j]);
-        const stats = pid ? getProcessStats(pid) : null;
-        rogues.push({
-          port: batch[j],
-          pid,
-          rssMB: stats ? stats.rssMB : 0,
-          cpuPercent: stats ? stats.cpuPercent : 0,
-          command: stats ? stats.command : 'unknown',
-          elapsed: stats ? stats.elapsed : null,
-        });
-      }
-    }
+  for (const entry of allPorts) {
+    if (registeredPorts.has(entry.port)) continue;
+    const stats = entry.pid ? getProcessStats(entry.pid) : null;
+    rogues.push({
+      port: entry.port,
+      pid: entry.pid,
+      rssMB: stats ? stats.rssMB : 0,
+      cpuPercent: stats ? stats.cpuPercent : 0,
+      command: stats ? stats.command : entry.command || 'unknown',
+      elapsed: stats ? stats.elapsed : null,
+    });
   }
 
   return rogues;
@@ -401,8 +412,6 @@ function validateRegistration(registry, name, data) {
 
 module.exports = {
   REGISTRY_PATH,
-  PORT_RANGE_START,
-  PORT_RANGE_END,
   expandPath,
   collapsePath,
   readRegistry,
@@ -414,6 +423,7 @@ module.exports = {
   getProcessStats,
   getTreeRssMB,
   getProjectStatuses,
+  getAllListeningPorts,
   findRogueProcesses,
   scanCaches,
   cleanProjectCaches,

@@ -214,14 +214,73 @@ function getClaudeSessions() {
   });
 }
 
+// System processes to exclude from resource hog detection
+const SYSTEM_PROCESS_NAMES = new Set([
+  'kernel_task', 'launchd', 'WindowServer', 'loginwindow', 'Finder',
+  'Dock', 'SystemUIServer', 'mds', 'mds_stores', 'mdworker',
+  'spotlight', 'coreaudiod', 'bluetoothd', 'airportd', 'sharingd',
+  'cloudd', 'bird', 'nsurlsessiond', 'trustd', 'syslogd',
+  'distnoted', 'cfprefsd', 'lsd', 'containermanagerd',
+  'com.apple.WebKit', 'Safari', 'Mail', 'Messages', 'Music',
+  'Photos', 'Calendar', 'Notes', 'Reminders', 'FaceTime',
+  'Activity Monitor', 'sysmond', 'symptomsd', 'powerd',
+]);
+
+const RSS_THRESHOLD_KB = 200 * 1024; // 200 MB
+
+function getResourceHogs(claudePids) {
+  let psOutput;
+  try {
+    psOutput = execSync('ps -eo pid,ppid,rss,%cpu,etime,command', { encoding: 'utf8', timeout: 5000 });
+  } catch {
+    return [];
+  }
+
+  const allProcesses = parsePsOutput(psOutput);
+  const claudePidSet = new Set(claudePids);
+  const myPid = process.pid;
+
+  // Filter to high-RAM processes that aren't Claude sessions, system procs, or us
+  const hogs = allProcesses.filter(p => {
+    if (p.rssKB < RSS_THRESHOLD_KB) return false;
+    if (claudePidSet.has(p.pid)) return false;
+    if (p.pid === myPid) return false;
+    const baseName = path.basename(p.command.split(/\s/)[0]);
+    if (SYSTEM_PROCESS_NAMES.has(baseName)) return false;
+    return true;
+  });
+
+  return hogs.map(proc => {
+    const workingDir = getWorkingDir(proc.pid);
+    const baseName = path.basename(proc.command.split(/\s/)[0]);
+    const label = workingDir && workingDir !== '/'
+      ? path.basename(workingDir)
+      : baseName || `pid-${proc.pid}`;
+
+    return {
+      pid: proc.pid,
+      workingDir: workingDir || 'unknown',
+      label,
+      command: proc.command,
+      rssGB: Math.round((proc.rssKB / 1048576) * 100) / 100,
+      rssMB: Math.round(proc.rssKB / 1024),
+      cpuPercent: proc.cpuPercent,
+      elapsed: proc.elapsed,
+    };
+  });
+}
+
 function collectAll() {
   const system = getSystemMetrics();
   const sessions = getClaudeSessions();
   system.claudeRamGB = Math.round(sessions.reduce((sum, s) => sum + s.treeRssGB, 0) * 100) / 100;
+  const claudePids = sessions.map(s => s.pid);
+  const resourceHogs = getResourceHogs(claudePids);
   return {
     timestamp: new Date().toISOString(),
     system,
     sessions,
+    resourceHogs,
   };
 }
 
@@ -232,5 +291,6 @@ module.exports = {
   buildProcessTree,
   getSystemMetrics,
   getClaudeSessions,
+  getResourceHogs,
   collectAll,
 };

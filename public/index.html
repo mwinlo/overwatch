@@ -221,6 +221,40 @@
       100% { opacity: 0; }
     }
 
+    /* Resource Hog Cards */
+    .session-card.resource-hog {
+      border-color: var(--amber);
+      border-left: 3px solid var(--amber);
+    }
+    .hog-badge {
+      display: inline-block;
+      background: rgba(245, 158, 11, 0.2);
+      color: var(--amber);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      letter-spacing: 1px;
+      margin-left: 8px;
+    }
+    .hog-command {
+      font-size: 11px; color: var(--text-secondary);
+      font-family: var(--font-mono);
+      margin-bottom: 16px; word-break: break-all;
+      max-height: 32px; overflow: hidden;
+    }
+    .sessions-divider {
+      grid-column: 1 / -1;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-secondary);
+      padding: 8px 0 4px;
+      border-top: 1px solid var(--border);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
     /* Empty State */
     .empty-state { text-align: center; padding: 80px 24px; color: var(--text-secondary); }
     .empty-state p { font-size: 16px; margin-bottom: 8px; }
@@ -584,8 +618,8 @@
   <section class="sessions-grid" id="sessions-grid"></section>
 
   <div class="empty-state" id="empty-state" style="display:none">
-    <p>No Claude Code sessions detected.</p>
-    <p>Start one in a terminal with <code>claude</code></p>
+    <p>No sessions or resource-heavy processes detected.</p>
+    <p>Start a Claude session with <code>claude</code> or a dev server</p>
   </div>
   </div><!-- /tab-sessions -->
 
@@ -664,8 +698,9 @@
     // ============================================================
     // SYSTEM HEALTH STRIP
     // ============================================================
-    function updateHealthStrip(system, sessions) {
-      var sessionCount = sessions.length;
+    function updateHealthStrip(system, sessions, resourceHogs) {
+      var hogCount = (resourceHogs || []).length;
+      var sessionCount = sessions.length + hogCount;
       var ramPct = Math.round((system.usedRamGB / system.totalRamGB) * 100);
       document.getElementById('ram-value').textContent = system.usedRamGB + ' / ' + system.totalRamGB + ' GB';
       document.getElementById('ram-sub').textContent = ramPct + '% used';
@@ -755,9 +790,9 @@
       var current = data.current;
       var history = data.history;
       updateAlerts(data.alerts);
-      updateHealthStrip(current.system, current.sessions);
+      updateHealthStrip(current.system, current.sessions, current.resourceHogs || []);
       updateCharts(history);
-      renderSessionCards(current.sessions, data.exitedSessions || []);
+      renderSessionCards(current.sessions, data.exitedSessions || [], current.resourceHogs || []);
     }
 
     // ============================================================
@@ -886,9 +921,10 @@
       sortMode = mode;
       document.getElementById('sort-age').classList.toggle('active', mode === 'age');
       document.getElementById('sort-memory').classList.toggle('active', mode === 'memory');
-      if (lastSessions) renderSessionCards(lastSessions);
+      if (lastSessions) renderSessionCards(lastSessions, [], lastResourceHogs);
     }
     var lastSessions = null;
+    var lastResourceHogs = [];
 
     function statusColor(treeRssGB) {
       if (treeRssGB > 4) return 'var(--red)';
@@ -914,12 +950,13 @@
       return div.innerHTML;
     }
 
-    function renderSessionCards(sessions, exitedSessions) {
+    function renderSessionCards(sessions, exitedSessions, resourceHogs) {
       var grid = document.getElementById('sessions-grid');
       var emptyState = document.getElementById('empty-state');
       var exited = exitedSessions || [];
+      var hogs = resourceHogs || [];
 
-      if (sessions.length === 0 && exited.length === 0) {
+      if (sessions.length === 0 && exited.length === 0 && hogs.length === 0) {
         grid.innerHTML = '';
         emptyState.style.display = 'block';
         return;
@@ -927,6 +964,7 @@
       emptyState.style.display = 'none';
 
       lastSessions = sessions;
+      lastResourceHogs = hogs;
       var sorted = sessions.slice().sort(
         sortMode === 'memory'
           ? function(a, b) { return b.treeRssGB - a.treeRssGB; }
@@ -1021,7 +1059,70 @@
         }).join('');
       }
 
+      // Resource hog cards (non-Claude processes using >200 MB RAM)
+      if (hogs.length > 0) {
+        var hogsSorted = hogs.slice().sort(function(a, b) { return b.rssMB - a.rssMB; });
+        if (sessions.length > 0 || exited.length > 0) {
+          html += '<div class="sessions-divider">Resource Hogs (&gt;200 MB)</div>';
+        }
+        html += hogsSorted.map(function(h) {
+          var memPct = Math.min(100, (h.rssGB / 4) * 100);
+          var isConfirming = !!killTimers['hog-' + h.pid];
+          return '<div class="session-card resource-hog" id="card-hog-' + h.pid + '">'
+            + '<div class="session-header">'
+            +   '<span class="session-label">'
+            +     '<span class="status-dot" style="background:var(--amber)"></span>'
+            +     escapeHtml(h.label)
+            +     '<span class="hog-badge">' + h.rssMB + ' MB</span>'
+            +   '</span>'
+            +   '<span class="session-pid">PID ' + h.pid + '</span>'
+            + '</div>'
+            + '<div class="session-path">' + escapeHtml(h.workingDir) + '</div>'
+            + '<div class="hog-command">' + escapeHtml(h.command) + '</div>'
+            + '<div class="session-metrics">'
+            +   '<div class="metric"><span class="metric-label">Memory</span><span class="metric-value">' + h.rssGB + ' GB</span></div>'
+            +   '<div class="metric"><span class="metric-label">CPU</span><span class="metric-value">' + h.cpuPercent + '%</span></div>'
+            +   '<div class="metric metric-bar"><div class="mini-bar"><div class="mini-fill" style="width:' + memPct + '%;background:var(--amber)"></div></div></div>'
+            +   '<div class="metric"><span class="metric-label">Uptime</span><span class="metric-value">' + (h.elapsed || '\u2014') + '</span></div>'
+            + '</div>'
+            + '<button class="kill-btn' + (isConfirming ? ' confirming' : '') + '" onclick="handleHogKill(' + h.pid + ', this)">'
+            +   (isConfirming ? 'Confirm Kill?' : 'Kill Process')
+            + '</button>'
+            + '<div style="clear:both"></div>'
+            + '</div>';
+        }).join('');
+      }
+
       grid.innerHTML = html;
+    }
+
+    function handleHogKill(pid, btn) {
+      var key = 'hog-' + pid;
+      if (!killTimers[key]) {
+        btn.textContent = 'Confirm Kill?';
+        btn.classList.add('confirming');
+        killTimers[key] = setTimeout(function() {
+          delete killTimers[key];
+          btn.textContent = 'Kill Process';
+          btn.classList.remove('confirming');
+        }, 3000);
+        return;
+      }
+      clearTimeout(killTimers[key]);
+      delete killTimers[key];
+
+      fetch('/api/kill-process/' + pid, { method: 'POST' })
+        .then(function(res) {
+          if (res.ok) {
+            var card = document.getElementById('card-hog-' + pid);
+            if (card) card.classList.add('killing');
+          } else {
+            return res.json().then(function(data) { alert('Kill failed: ' + data.error); });
+          }
+        })
+        .catch(function(err) {
+          alert('Kill failed: ' + err.message);
+        });
     }
 
     function handleKill(pid, btn) {
