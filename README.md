@@ -18,6 +18,30 @@ npm start
 
 Open [http://localhost:4040](http://localhost:4040)
 
+## Running as a Background Service (launchd)
+
+Overwatch can run as a macOS launchd service — starts on login, restarts on crash, no terminal needed.
+
+**Plist location:** `~/Library/LaunchAgents/com.overwatch.dashboard.plist`
+
+```bash
+# Start the service
+launchctl load ~/Library/LaunchAgents/com.overwatch.dashboard.plist
+
+# Stop the service
+launchctl unload ~/Library/LaunchAgents/com.overwatch.dashboard.plist
+
+# Restart (stop then start)
+launchctl unload ~/Library/LaunchAgents/com.overwatch.dashboard.plist
+launchctl load ~/Library/LaunchAgents/com.overwatch.dashboard.plist
+
+# Check if running
+lsof -ti :4040 -sTCP:LISTEN
+
+# View logs
+tail -f ~/.overwatch/logs/launchd.log
+```
+
 ## What You See
 
 ### System Health Strip
@@ -51,7 +75,24 @@ One card per active Claude Code session, with a sort toggle (oldest first or by 
 - **Token estimates** — Input/output token counts and approximate cost, parsed from Claude's conversation logs
 - **Kill button** — Two-click confirmation: first click shows "Confirm Kill?", second click sends SIGTERM (then SIGKILL after 2 seconds if needed)
 
-When no Claude Code sessions are running, an empty state message is shown instead.
+### Resource Hog Cards
+
+Below Claude sessions, Overwatch shows any process consuming >200 MB RSS that isn't a Claude session, a known macOS system service, or Overwatch itself. These appear with an amber left border and a RAM badge. Each card shows:
+
+- **Label** — Derived from the process's working directory (preferred) or command name
+- **Command** — The full command line
+- **Memory / CPU / Uptime** — Same metrics as Claude sessions
+- **Kill button** — Same two-click confirmation, calls `POST /api/kill-process/:pid`
+
+When no Claude sessions or resource hogs are running, an empty state message is shown instead.
+
+### Port Map Tab
+
+A second tab showing all registered dev servers and any unregistered ("rogue") listeners:
+
+- **Registered projects** — From `~/.dev-registry.json`, with status badges, memory limit bars, and start/stop/clean controls
+- **Rogue processes** — Any TCP listener on **any port** not in the registry (discovered via a single `lsof -iTCP -sTCP:LISTEN` call, not a fixed port range)
+- **Port registry CLI** — Use `claim-ports` (symlinked to `~/bin/claim-ports`) to register projects
 
 ### Alert System
 
@@ -117,6 +158,8 @@ Every 3 seconds, the server calls `collectAll()` which:
 
 2. **Session discovery** — Runs `ps -eo pid,ppid,rss,%cpu,etime,command` and filters for processes whose command is `claude` (excluding `Claude.app`, `Claude Helper`, and `claude_crashpad`). For each session, it builds a process tree by tracing parent-child PID relationships to include spawned subprocesses.
 
+3. **Resource hog detection** — From the same `ps` output, finds any process using >200 MB RSS that isn't a Claude session, Overwatch itself, or a known macOS system process (kernel_task, WindowServer, Finder, etc.). Labels are derived from the working directory or command name.
+
 3. **Per-session metrics** — For each discovered session:
    - **Working directory** via `lsof -a -p <PID> -d cwd`
    - **Thread count** via `ps -M <PID>`
@@ -140,7 +183,7 @@ Three pure functions, extracted for testability:
 - **History buffer** stores the last 400 data points (20 minutes at 3-second intervals) in memory for the time-series charts
 - **Growth tracker** maintains a per-session rolling window of memory samples (last 10 polls) for burst and runaway detection
 - **Exited session tracker** keeps tombstone data for recently exited sessions (30-second TTL)
-- **Kill endpoint** (`POST /api/kill/:pid`) validates the PID belongs to a Claude CLI process, sends SIGTERM, waits 2 seconds, then sends SIGKILL if the process is still alive
+- **Kill endpoints** — `POST /api/kill/:pid` (Claude sessions only), `POST /api/kill-project/:name`, `POST /api/kill-port/:port`, `POST /api/kill-process/:pid` (any user-owned process, for resource hogs). All send SIGTERM then SIGKILL after 2 seconds
 - **Auto-kill** terminates any session exceeding the RAM ceiling on each poll cycle
 
 ### Frontend (`public/index.html`)
