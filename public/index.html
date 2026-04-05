@@ -493,17 +493,19 @@
 
     .port-card.compact {
       padding: 10px 14px;
-      display: flex; align-items: center; justify-content: space-between;
-      gap: 12px;
-      grid-column: 1 / -1;
+      display: flex; flex-direction: column; align-items: stretch;
+      gap: 8px;
+      opacity: 0.7;
     }
-    .port-card.compact .port-card-name { font-size: 14px; margin: 0; }
+    .port-card.compact:hover { opacity: 1; }
+    .port-card.compact .port-card-name { font-size: 13px; margin: 0; }
     .port-card.compact .port-number { font-size: 12px; }
     .port-card.compact .port-card-header {
-      margin: 0; flex: 1; display: flex; align-items: center; gap: 12px;
+      margin: 0; display: flex; align-items: center; gap: 8px;
     }
-    .port-card.compact .port-card-actions { padding: 0; margin: 0; }
+    .port-card.compact .port-card-actions { padding: 0; margin: 0; justify-content: flex-end; }
     .port-card.compact .port-card-header-right { margin-left: auto; }
+    .port-card.compact .port-action-btn { padding: 3px 10px; font-size: 11px; }
     .last-seen {
       font-family: var(--font-mono); font-size: 11px;
       color: var(--text-secondary);
@@ -1763,6 +1765,7 @@
           port: p.port,
           mem: p.treeRssMB || 0,
           cpu: p.cpuPercent || 0,
+          stopped: !p.running,
         });
       });
       var hiddenRogues = 0;
@@ -1786,6 +1789,10 @@
       }
 
       items.sort(function(a, b) {
+        // Stopped projects always sink to the bottom regardless of sort mode
+        var aStopped = a.stopped ? 1 : 0;
+        var bStopped = b.stopped ? 1 : 0;
+        if (aStopped !== bStopped) return aStopped - bStopped;
         if (portMapSortMode === 'memory') return b.mem - a.mem;
         if (portMapSortMode === 'cpu') return b.cpu - a.cpu;
         return a.port - b.port;
