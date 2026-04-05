@@ -647,6 +647,11 @@
         <div class="health-card-sub">unregistered ports</div>
       </div>
     </section>
+    <div class="sort-bar">
+      <button class="sort-btn active" id="pm-sort-port" onclick="setPortMapSortMode('port')">By port</button>
+      <button class="sort-btn" id="pm-sort-memory" onclick="setPortMapSortMode('memory')">By memory</button>
+      <button class="sort-btn" id="pm-sort-cpu" onclick="setPortMapSortMode('cpu')">By CPU</button>
+    </div>
     <section class="portmap-grid" id="portmap-grid"></section>
     <div class="empty-state" id="portmap-empty" style="display:none">
       <p>No projects registered.</p>
@@ -1391,10 +1396,22 @@
     }
 
     var lastPortMapStructure = '';
+    var portMapSortMode = 'port'; // 'port' | 'memory' | 'cpu'
+    var lastPortMapData = null;
+
+    function setPortMapSortMode(mode) {
+      portMapSortMode = mode;
+      ['port', 'memory', 'cpu'].forEach(function(m) {
+        var btn = document.getElementById('pm-sort-' + m);
+        if (btn) btn.classList.toggle('active', m === mode);
+      });
+      lastPortMapStructure = '';
+      if (lastPortMapData) renderPortMap(lastPortMapData);
+    }
 
     function getPortMapStructure(data) {
       // Only track what requires a full rebuild: which projects exist, running state, rogue ports
-      var parts = [];
+      var parts = [portMapSortMode];
       Object.keys(data.projects).sort().forEach(function(name) {
         var p = data.projects[name];
         parts.push(name + ':' + p.port + ':' + p.running + ':' + p.pid);
@@ -1404,6 +1421,7 @@
     }
 
     function renderPortMap(data) {
+      lastPortMapData = data;
       var projects = data.projects;
       var rogues = data.rogues;
       var summary = data.summary;
@@ -1431,14 +1449,41 @@
       }
       document.getElementById('portmap-empty').style.display = 'none';
 
-      names.sort(function(a, b) {
-        return projects[a].port - projects[b].port;
+      // Build a unified list so project + rogue cards are sorted together
+      var items = [];
+      names.forEach(function(name) {
+        var p = projects[name];
+        items.push({
+          kind: 'project',
+          name: name,
+          data: p,
+          port: p.port,
+          mem: p.treeRssMB || 0,
+          cpu: p.cpuPercent || 0,
+        });
+      });
+      (rogues || []).forEach(function(r) {
+        items.push({
+          kind: 'rogue',
+          data: r,
+          port: r.port,
+          mem: r.rssMB || 0,
+          cpu: r.cpuPercent || 0,
+        });
+      });
+
+      items.sort(function(a, b) {
+        if (portMapSortMode === 'memory') return b.mem - a.mem;
+        if (portMapSortMode === 'cpu') return b.cpu - a.cpu;
+        return a.port - b.port;
       });
 
       // Build DOM safely
       var frag = document.createDocumentFragment();
-      names.forEach(function(name) { frag.appendChild(buildPortCard(projects[name], name)); });
-      rogues.forEach(function(r) { frag.appendChild(buildRogueCard(r)); });
+      items.forEach(function(it) {
+        if (it.kind === 'project') frag.appendChild(buildPortCard(it.data, it.name));
+        else frag.appendChild(buildRogueCard(it.data));
+      });
 
       grid.textContent = '';
       grid.appendChild(frag);
