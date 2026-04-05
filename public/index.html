@@ -595,10 +595,6 @@
     .port-action-btn.start { color: var(--green); }
     .port-action-btn.start:hover { background: rgba(34,197,94,0.1); border-color: var(--green); }
 
-    .rogue-label {
-      font-family: var(--font-mono); font-size: 13px; font-weight: 700;
-      color: var(--red); margin-bottom: 6px;
-    }
     .rogue-command {
       font-family: var(--font-mono); font-size: 11px;
       color: var(--text-secondary); margin-bottom: 14px;
@@ -1629,6 +1625,14 @@
 
     function handleKillAllRogues(btn) {
       if (!lastPortMapData || !lastPortMapData.rogues) return;
+      // Respect the same filters used by renderPortMap: if search or group
+      // filter is active, all rogues are suppressed from view, so none are
+      // "visible" and nothing should be killed.
+      if (searchQuery || activeGroup) {
+        btn.textContent = 'No rogues';
+        setTimeout(function() { btn.textContent = 'Kill visible rogues'; }, 2000);
+        return;
+      }
       var visible = lastPortMapData.rogues.filter(function(r) {
         return showAllRogues || !isLowImpactRogue(r);
       });
