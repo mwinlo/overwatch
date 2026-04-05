@@ -142,6 +142,9 @@
     }
     .sort-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.15); }
     .sort-btn.active { color: var(--text); background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); }
+    .sort-btn.kill-all { color: var(--red); }
+    .sort-btn.kill-all:hover { background: rgba(239,68,68,0.1); border-color: var(--red); }
+    .sort-btn.kill-all.confirming { background: var(--kill-red); color: white; border-color: var(--kill-red); }
     .sort-bar-spacer { flex: 1; }
 
     /* Session Cards */
@@ -664,6 +667,7 @@
       <button class="sort-btn" id="pm-sort-cpu" onclick="setPortMapSortMode('cpu')">By CPU</button>
       <div class="sort-bar-spacer"></div>
       <button class="sort-btn" id="pm-toggle-rogues" onclick="toggleRogues()">Show system rogues</button>
+      <button class="sort-btn kill-all" id="pm-kill-rogues" onclick="handleKillAllRogues(this)">Kill visible rogues</button>
     </div>
     <section class="portmap-grid" id="portmap-grid"></section>
     <div class="empty-state" id="portmap-empty" style="display:none">
@@ -1437,6 +1441,58 @@
       document.getElementById('pm-toggle-rogues').classList.toggle('active', showAllRogues);
       lastPortMapStructure = '';
       if (lastPortMapData) renderPortMap(lastPortMapData);
+    }
+
+    var killAllRoguesConfirmTimer = null;
+
+    function handleKillAllRogues(btn) {
+      if (!lastPortMapData || !lastPortMapData.rogues) return;
+      var visible = lastPortMapData.rogues.filter(function(r) {
+        return showAllRogues || !isLowImpactRogue(r);
+      });
+      if (visible.length === 0) {
+        btn.textContent = 'No rogues';
+        setTimeout(function() { btn.textContent = 'Kill visible rogues'; }, 2000);
+        return;
+      }
+      if (!killAllRoguesConfirmTimer) {
+        btn.textContent = 'Kill ' + visible.length + '? Confirm';
+        btn.classList.add('confirming');
+        killAllRoguesConfirmTimer = setTimeout(function() {
+          killAllRoguesConfirmTimer = null;
+          btn.textContent = 'Kill visible rogues';
+          btn.classList.remove('confirming');
+        }, 3000);
+        return;
+      }
+      clearTimeout(killAllRoguesConfirmTimer);
+      killAllRoguesConfirmTimer = null;
+      btn.textContent = 'Killing...';
+      btn.disabled = true;
+      fetch('/api/kill-all-rogues', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ports: visible.map(function(r) { return r.port; }) }),
+      })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          var okCount = (data.results || []).filter(function(x) { return x.ok; }).length;
+          btn.textContent = 'Killed ' + okCount + '/' + visible.length;
+          setTimeout(function() {
+            btn.textContent = 'Kill visible rogues';
+            btn.classList.remove('confirming');
+            btn.disabled = false;
+            fetchPortMap();
+          }, 2000);
+        })
+        .catch(function() {
+          btn.textContent = 'Error';
+          setTimeout(function() {
+            btn.textContent = 'Kill visible rogues';
+            btn.classList.remove('confirming');
+            btn.disabled = false;
+          }, 2000);
+        });
     }
 
     function setPortMapSortMode(mode) {

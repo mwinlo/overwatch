@@ -188,6 +188,30 @@ function createServer(port = DEFAULT_PORT) {
     });
   });
 
+  // Kill all visible rogues by port list
+  app.post('/api/kill-all-rogues', (req, res) => {
+    const ports = req.body && Array.isArray(req.body.ports) ? req.body.ports : null;
+    if (!ports || ports.length === 0) {
+      return res.status(400).json({ error: 'ports (non-empty array) is required' });
+    }
+    const results = ports.map(p => {
+      const port = parseInt(p);
+      if (isNaN(port)) return { port: p, ok: false, error: 'invalid port' };
+      const pid = registry.getPidOnPort(port);
+      if (!pid) return { port, ok: false, error: 'no process' };
+      try {
+        treeKill(pid, 'SIGTERM');
+        setTimeout(() => {
+          try { process.kill(pid, 0); treeKill(pid, 'SIGKILL'); } catch {}
+        }, 2000);
+        return { port, ok: true, pid };
+      } catch (err) {
+        return { port, ok: false, error: err.message };
+      }
+    });
+    res.json({ results });
+  });
+
   // Scan build caches
   app.get('/api/caches', (req, res) => {
     const reg = registry.ensureRegistry();

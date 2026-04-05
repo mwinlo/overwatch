@@ -32,6 +32,53 @@ describe('server HTTP', () => {
   });
 });
 
+describe('POST /api/kill-all-rogues', () => {
+  let server;
+  const PORT = 4043;
+
+  after(async () => {
+    if (server) await new Promise(r => server.close(r));
+  });
+
+  it('returns 400 when body.ports is missing', async () => {
+    const { createServer } = require('../server');
+    server = await createServer(PORT);
+    const res = await fetch(`http://localhost:${PORT}/api/kill-all-rogues`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    assert.equal(res.status, 400);
+    const data = await res.json();
+    assert.ok(data.error);
+  });
+
+  it('returns 400 when body.ports is empty array', async () => {
+    const res = await fetch(`http://localhost:${PORT}/api/kill-all-rogues`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ports: [] }),
+    });
+    assert.equal(res.status, 400);
+  });
+
+  it('returns 200 with results array (no match)', async () => {
+    const res = await fetch(`http://localhost:${PORT}/api/kill-all-rogues`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ports: [65530, 65531] }),
+    });
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.ok(Array.isArray(data.results));
+    assert.equal(data.results.length, 2);
+    data.results.forEach(r => {
+      assert.ok('port' in r);
+      assert.ok('ok' in r);
+    });
+  });
+});
+
 describe('server WebSocket', () => {
   let server;
   const PORT = 4042;
