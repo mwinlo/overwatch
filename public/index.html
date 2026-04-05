@@ -542,9 +542,11 @@
       color: var(--red); margin-bottom: 6px;
     }
     .rogue-command {
-      font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono);
-      word-break: break-all; margin-bottom: 14px;
-      max-height: 40px; overflow: hidden; text-overflow: ellipsis;
+      font-family: var(--font-mono); font-size: 11px;
+      color: var(--text-secondary); margin-bottom: 14px;
+      cursor: help;
+      text-decoration: underline dotted rgba(255,255,255,0.15);
+      text-underline-offset: 3px;
     }
   </style>
 </head>
@@ -1368,7 +1370,14 @@
       card.appendChild(label);
       var cmd = document.createElement('div');
       cmd.className = 'rogue-command';
-      cmd.textContent = r.command || 'unknown';
+      var fullCommand = r.command || 'unknown';
+      // Split off args by looking for ' --' or ' -' flag prefixes
+      var argMatch = fullCommand.match(/^(.*?)(\s+-{1,2}\S.*)?$/);
+      var cmdPath = (argMatch && argMatch[1]) ? argMatch[1] : fullCommand;
+      // Take basename (handles paths with spaces)
+      var basename = cmdPath.split('/').pop() || cmdPath;
+      cmd.textContent = basename.trim();
+      cmd.title = fullCommand;
       card.appendChild(cmd);
 
       var metrics = document.createElement('div');
