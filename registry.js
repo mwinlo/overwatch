@@ -25,6 +25,13 @@ const DEFAULT_REGISTRY = {
   },
 };
 
+// In-memory tracking of when each project was last observed running.
+// Lost on server restart — sufficient for current needs.
+const lastSeenAt = new Map();
+function touchLastSeen(name) { lastSeenAt.set(name, Date.now()); }
+function getLastSeen(name) { return lastSeenAt.has(name) ? lastSeenAt.get(name) : null; }
+function _resetLastSeen() { lastSeenAt.clear(); }
+
 function expandPath(p) {
   if (p.startsWith('~/')) return path.join(os.homedir(), p.slice(2));
   return p;
@@ -198,6 +205,9 @@ async function getProjectStatuses(registry, excludePids) {
         }
       }
     }
+
+    if (info.running) touchLastSeen(name);
+    info.lastSeenMs = getLastSeen(name);
 
     results[name] = info;
   }
@@ -430,4 +440,7 @@ module.exports = {
   syncEnvPort,
   syncAllEnvs,
   validateRegistration,
+  touchLastSeen,
+  getLastSeen,
+  _resetLastSeen,
 };

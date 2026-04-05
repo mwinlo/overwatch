@@ -503,6 +503,10 @@
       margin: 0; flex: 1; display: flex; align-items: center; gap: 12px;
     }
     .port-card.compact .port-card-actions { padding: 0; margin: 0; }
+    .last-seen {
+      font-family: var(--font-mono); font-size: 11px;
+      color: var(--text-secondary); margin-right: auto;
+    }
 
     .port-card-header {
       display: flex; justify-content: space-between; align-items: flex-start;
@@ -1344,6 +1348,17 @@
         badge.className = 'port-status-badge stopped';
         badge.textContent = 'STOPPED';
         header.appendChild(nameEl);
+        if (p.lastSeenMs) {
+          var ago = document.createElement('span');
+          ago.className = 'last-seen';
+          var mins = Math.round((Date.now() - p.lastSeenMs) / 60000);
+          var label;
+          if (mins < 1) label = 'just stopped';
+          else if (mins < 60) label = 'stopped ' + mins + 'm ago';
+          else label = 'stopped ' + Math.round(mins / 60) + 'h ago';
+          ago.textContent = label;
+          header.appendChild(ago);
+        }
         header.appendChild(portNum);
         header.appendChild(badge);
         card.appendChild(header);
