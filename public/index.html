@@ -503,9 +503,10 @@
       margin: 0; flex: 1; display: flex; align-items: center; gap: 12px;
     }
     .port-card.compact .port-card-actions { padding: 0; margin: 0; }
+    .port-card.compact .port-card-header-right { margin-left: auto; }
     .last-seen {
       font-family: var(--font-mono); font-size: 11px;
-      color: var(--text-secondary); margin-right: auto;
+      color: var(--text-secondary);
     }
 
     .port-card-header {
@@ -1355,8 +1356,11 @@
           ago.textContent = label;
           header.appendChild(ago);
         }
-        header.appendChild(portNum);
-        header.appendChild(badge);
+        var headerRight = document.createElement('div');
+        headerRight.className = 'port-card-header-right';
+        headerRight.appendChild(portNum);
+        headerRight.appendChild(badge);
+        header.appendChild(headerRight);
         card.appendChild(header);
 
         var actions = document.createElement('div');
