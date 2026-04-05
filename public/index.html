@@ -128,7 +128,10 @@
 
     /* Sort Bar */
     .sort-bar {
-      padding: 0 24px 12px;
+      /* tab-bar height: 12px(pad-top) + ~16px(13px font/1.2lh) + 12px(pad-bottom) + 1px(border) = 41px */
+      position: sticky; top: 41px; z-index: 19;
+      background: var(--bg);
+      padding: 12px 24px;
       display: flex; gap: 8px;
     }
     .sort-btn {
@@ -411,6 +414,8 @@
 
     /* ========== TAB NAVIGATION ========== */
     .tab-bar {
+      position: sticky; top: 0; z-index: 20;
+      background: var(--bg);
       display: flex; gap: 0; padding: 0 24px;
       border-bottom: 1px solid var(--border);
     }
