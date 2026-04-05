@@ -489,7 +489,7 @@
     }
 
     .port-metrics {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 16px;
       font-size: 13px; margin-bottom: 14px;
     }
 
@@ -1259,7 +1259,7 @@
         // Metrics grid
         var metrics = document.createElement('div');
         metrics.className = 'port-metrics';
-        var pairs = [['Memory', p.treeRssMB + ' MB'], ['CPU', p.cpuPercent + '%'], ['PID', p.pid], ['Uptime', formatUptime(p.elapsed)]];
+        var pairs = [['CPU', p.cpuPercent + '%'], ['PID', p.pid], ['Uptime', formatUptime(p.elapsed)]];
         pairs.forEach(function(pair) {
           var m = document.createElement('div');
           m.className = 'metric';
