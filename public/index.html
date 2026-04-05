@@ -142,6 +142,7 @@
     }
     .sort-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.15); }
     .sort-btn.active { color: var(--text); background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); }
+    .sort-bar-spacer { flex: 1; }
 
     /* Session Cards */
     .sessions-grid {
@@ -661,6 +662,8 @@
       <button class="sort-btn active" id="pm-sort-port" onclick="setPortMapSortMode('port')">By port</button>
       <button class="sort-btn" id="pm-sort-memory" onclick="setPortMapSortMode('memory')">By memory</button>
       <button class="sort-btn" id="pm-sort-cpu" onclick="setPortMapSortMode('cpu')">By CPU</button>
+      <div class="sort-bar-spacer"></div>
+      <button class="sort-btn" id="pm-toggle-rogues" onclick="toggleRogues()">Show system rogues</button>
     </div>
     <section class="portmap-grid" id="portmap-grid"></section>
     <div class="empty-state" id="portmap-empty" style="display:none">
@@ -1423,6 +1426,18 @@
     var lastPortMapStructure = '';
     var portMapSortMode = 'port'; // 'port' | 'memory' | 'cpu'
     var lastPortMapData = null;
+    var showAllRogues = false;
+
+    function isLowImpactRogue(r) {
+      return (r.rssMB || 0) < 100 && (r.cpuPercent || 0) < 1;
+    }
+
+    function toggleRogues() {
+      showAllRogues = !showAllRogues;
+      document.getElementById('pm-toggle-rogues').classList.toggle('active', showAllRogues);
+      lastPortMapStructure = '';
+      if (lastPortMapData) renderPortMap(lastPortMapData);
+    }
 
     function setPortMapSortMode(mode) {
       portMapSortMode = mode;
@@ -1436,7 +1451,7 @@
 
     function getPortMapStructure(data) {
       // Only track what requires a full rebuild: which projects exist, running state, rogue ports
-      var parts = [portMapSortMode];
+      var parts = [portMapSortMode, showAllRogues ? 'all' : 'impact'];
       Object.keys(data.projects).sort().forEach(function(name) {
         var p = data.projects[name];
         parts.push(name + ':' + p.port + ':' + p.running + ':' + p.pid);
@@ -1487,7 +1502,9 @@
           cpu: p.cpuPercent || 0,
         });
       });
+      var hiddenRogues = 0;
       (rogues || []).forEach(function(r) {
+        if (!showAllRogues && isLowImpactRogue(r)) { hiddenRogues++; return; }
         items.push({
           kind: 'rogue',
           data: r,
@@ -1496,6 +1513,12 @@
           cpu: r.cpuPercent || 0,
         });
       });
+      var toggleBtn = document.getElementById('pm-toggle-rogues');
+      if (toggleBtn) {
+        if (showAllRogues) toggleBtn.textContent = 'Hide system rogues';
+        else if (hiddenRogues > 0) toggleBtn.textContent = 'Show system rogues (' + hiddenRogues + ')';
+        else toggleBtn.textContent = 'Show system rogues';
+      }
 
       items.sort(function(a, b) {
         if (portMapSortMode === 'memory') return b.mem - a.mem;
