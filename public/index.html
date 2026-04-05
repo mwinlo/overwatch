@@ -457,6 +457,19 @@
     .port-card.over-limit { border-top-color: var(--red); }
     .port-card.rogue { border-top-color: var(--red); border-style: dashed; border-top-style: solid; }
 
+    .port-card.compact {
+      padding: 10px 14px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px;
+      grid-column: 1 / -1;
+    }
+    .port-card.compact .port-card-name { font-size: 14px; margin: 0; }
+    .port-card.compact .port-number { font-size: 12px; }
+    .port-card.compact .port-card-header {
+      margin: 0; flex: 1; display: flex; align-items: center; gap: 12px;
+    }
+    .port-card.compact .port-card-actions { padding: 0; margin: 0; }
+
     .port-card-header {
       display: flex; justify-content: space-between; align-items: flex-start;
       margin-bottom: 4px;
@@ -666,6 +679,7 @@
       <button class="sort-btn" id="pm-sort-memory" onclick="setPortMapSortMode('memory')">By memory</button>
       <button class="sort-btn" id="pm-sort-cpu" onclick="setPortMapSortMode('cpu')">By CPU</button>
       <div class="sort-bar-spacer"></div>
+      <button class="sort-btn" id="pm-running-only" onclick="toggleRunningOnly()">Running only</button>
       <button class="sort-btn" id="pm-toggle-rogues" onclick="toggleRogues()">Show system rogues</button>
       <button class="sort-btn kill-all" id="pm-kill-rogues" onclick="handleKillAllRogues(this)">Kill visible rogues</button>
     </div>
@@ -1238,6 +1252,40 @@
       } else { badgeClass += ' stopped'; }
       card.className = cardClass;
 
+      if (!p.running) {
+        card.className = 'port-card compact';
+        var header = document.createElement('div');
+        header.className = 'port-card-header';
+        var nameEl = document.createElement('div');
+        nameEl.className = 'port-card-name';
+        nameEl.textContent = name;
+        var portNum = document.createElement('span');
+        portNum.className = 'port-number';
+        portNum.textContent = ':' + p.port;
+        var badge = document.createElement('span');
+        badge.className = 'port-status-badge stopped';
+        badge.textContent = 'STOPPED';
+        header.appendChild(nameEl);
+        header.appendChild(portNum);
+        header.appendChild(badge);
+        card.appendChild(header);
+
+        var actions = document.createElement('div');
+        actions.className = 'port-card-actions';
+        var startBtn = document.createElement('button');
+        startBtn.className = 'port-action-btn start';
+        startBtn.textContent = 'Start';
+        startBtn.addEventListener('click', function() { handlePortStart(name, startBtn); });
+        var cleanBtn = document.createElement('button');
+        cleanBtn.className = 'port-action-btn clean';
+        cleanBtn.textContent = 'Clean';
+        cleanBtn.addEventListener('click', function() { handlePortClean(name, cleanBtn); });
+        actions.appendChild(startBtn);
+        actions.appendChild(cleanBtn);
+        card.appendChild(actions);
+        return card;
+      }
+
       // Header: name on left, port + status badge on right
       var header = document.createElement('div');
       header.className = 'port-card-header';
@@ -1431,6 +1479,7 @@
     var portMapSortMode = 'port'; // 'port' | 'memory' | 'cpu'
     var lastPortMapData = null;
     var showAllRogues = false;
+    var runningOnly = false;
 
     function isLowImpactRogue(r) {
       return (r.rssMB || 0) < 100 && (r.cpuPercent || 0) < 1;
@@ -1439,6 +1488,13 @@
     function toggleRogues() {
       showAllRogues = !showAllRogues;
       document.getElementById('pm-toggle-rogues').classList.toggle('active', showAllRogues);
+      lastPortMapStructure = '';
+      if (lastPortMapData) renderPortMap(lastPortMapData);
+    }
+
+    function toggleRunningOnly() {
+      runningOnly = !runningOnly;
+      document.getElementById('pm-running-only').classList.toggle('active', runningOnly);
       lastPortMapStructure = '';
       if (lastPortMapData) renderPortMap(lastPortMapData);
     }
@@ -1507,7 +1563,7 @@
 
     function getPortMapStructure(data) {
       // Only track what requires a full rebuild: which projects exist, running state, rogue ports
-      var parts = [portMapSortMode, showAllRogues ? 'all' : 'impact'];
+      var parts = [portMapSortMode, showAllRogues ? 'all' : 'impact', runningOnly ? 'run' : 'any'];
       Object.keys(data.projects).sort().forEach(function(name) {
         var p = data.projects[name];
         parts.push(name + ':' + p.port + ':' + p.running + ':' + p.pid);
@@ -1549,6 +1605,7 @@
       var items = [];
       names.forEach(function(name) {
         var p = projects[name];
+        if (runningOnly && !p.running) return;
         items.push({
           kind: 'project',
           name: name,
