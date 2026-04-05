@@ -458,8 +458,8 @@
       margin-bottom: 4px;
     }
     .port-number {
-      font-family: var(--font-mono); font-size: 28px; font-weight: 700;
-      line-height: 1; color: var(--text);
+      font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+      color: var(--text-secondary);
     }
     .port-card.running .port-number { color: var(--green); }
     .port-card.rogue .port-number { color: var(--red); }
@@ -475,8 +475,11 @@
     .port-status-badge.over-limit { background: rgba(239,68,68,0.15); color: var(--red); }
 
     .port-card-name {
-      font-family: var(--font-mono); font-size: 15px; font-weight: 700;
-      margin-bottom: 2px;
+      font-family: var(--font-mono); font-size: 18px; font-weight: 700;
+      margin-bottom: 4px; color: var(--text);
+    }
+    .port-card-header-right {
+      display: flex; gap: 10px; align-items: center;
     }
     .port-card-desc {
       font-size: 12px; color: var(--text-secondary); margin-bottom: 14px;
@@ -1228,24 +1231,27 @@
       } else { badgeClass += ' stopped'; }
       card.className = cardClass;
 
-      // Header
+      // Header: name on left, port + status badge on right
       var header = document.createElement('div');
       header.className = 'port-card-header';
-      var portNum = document.createElement('span');
-      portNum.className = 'port-number';
-      portNum.textContent = p.port;
-      var badge = document.createElement('span');
-      badge.className = badgeClass;
-      badge.textContent = badgeText;
-      header.appendChild(portNum);
-      header.appendChild(badge);
-      card.appendChild(header);
-
-      // Name + desc + group
       var nameEl = document.createElement('div');
       nameEl.className = 'port-card-name';
       nameEl.textContent = name;
-      card.appendChild(nameEl);
+      var headerRight = document.createElement('div');
+      headerRight.className = 'port-card-header-right';
+      var portNum = document.createElement('span');
+      portNum.className = 'port-number';
+      portNum.textContent = ':' + p.port;
+      var badge = document.createElement('span');
+      badge.className = badgeClass;
+      badge.textContent = badgeText;
+      headerRight.appendChild(portNum);
+      headerRight.appendChild(badge);
+      header.appendChild(nameEl);
+      header.appendChild(headerRight);
+      card.appendChild(header);
+
+      // desc + group
       var descEl = document.createElement('div');
       descEl.className = 'port-card-desc';
       descEl.textContent = p.description;
@@ -1354,20 +1360,23 @@
 
       var header = document.createElement('div');
       header.className = 'port-card-header';
+      var rogueLabel = document.createElement('div');
+      rogueLabel.className = 'port-card-name';
+      rogueLabel.textContent = '? Unregistered';
+      var headerRight = document.createElement('div');
+      headerRight.className = 'port-card-header-right';
       var portNum = document.createElement('span');
       portNum.className = 'port-number';
-      portNum.textContent = r.port;
+      portNum.textContent = ':' + r.port;
       var badge = document.createElement('span');
       badge.className = 'port-status-badge rogue';
       badge.textContent = 'ROGUE';
-      header.appendChild(portNum);
-      header.appendChild(badge);
+      headerRight.appendChild(portNum);
+      headerRight.appendChild(badge);
+      header.appendChild(rogueLabel);
+      header.appendChild(headerRight);
       card.appendChild(header);
 
-      var label = document.createElement('div');
-      label.className = 'rogue-label';
-      label.textContent = '? Unregistered process';
-      card.appendChild(label);
       var cmd = document.createElement('div');
       cmd.className = 'rogue-command';
       var fullCommand = r.command || 'unknown';
