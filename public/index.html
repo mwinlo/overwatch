@@ -128,8 +128,8 @@
 
     /* Sort Bar */
     .sort-bar {
-      /* tab-bar height: 12px(pad-top) + ~16px(13px font/1.2lh) + 12px(pad-bottom) + 1px(border) = 41px */
-      position: sticky; top: 41px; z-index: 19;
+      /* system-bar: 33px + tab-bar: 12px(pad-top) + ~16px(13px font/1.2lh) + 12px(pad-bottom) + 1px(border) = 41px → total 74px */
+      position: sticky; top: 74px; z-index: 19;
       background: var(--bg);
       padding: 12px 24px;
       display: flex; gap: 8px;
@@ -438,9 +438,21 @@
       font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono);
     }
 
+    /* ========== SYSTEM BAR ========== */
+    .system-bar {
+      position: sticky; top: 0; z-index: 25;
+      display: flex; gap: 24px; align-items: center;
+      padding: 8px 24px; background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      font-family: var(--font-mono); font-size: 12px;
+    }
+    .system-metric { display: flex; gap: 6px; align-items: baseline; }
+    .system-metric-label { color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; font-size: 10px; }
+    .system-metric-value { color: var(--text); font-weight: 600; font-size: 13px; }
+
     /* ========== TAB NAVIGATION ========== */
     .tab-bar {
-      position: sticky; top: 0; z-index: 20;
+      position: sticky; top: 33px; /* below system-bar: 8+8px padding + ~16px line-height + 1px border = 33px */ z-index: 20;
       background: var(--bg);
       display: flex; gap: 0; padding: 0 24px;
       border-bottom: 1px solid var(--border);
@@ -612,6 +624,29 @@
     </div>
   </header>
 
+  <div class="system-bar">
+    <div class="system-metric">
+      <span class="system-metric-label">RAM</span>
+      <span class="system-metric-value" id="sb-ram">—</span>
+    </div>
+    <div class="system-metric">
+      <span class="system-metric-label">CPU</span>
+      <span class="system-metric-value" id="sb-cpu">—</span>
+    </div>
+    <div class="system-metric">
+      <span class="system-metric-label">Sessions</span>
+      <span class="system-metric-value" id="sb-sessions">—</span>
+    </div>
+    <div class="system-metric">
+      <span class="system-metric-label">Ports</span>
+      <span class="system-metric-value" id="sb-ports">—</span>
+    </div>
+    <div class="system-metric">
+      <span class="system-metric-label">Rogues</span>
+      <span class="system-metric-value" id="sb-rogues">—</span>
+    </div>
+  </div>
+
   <nav class="tab-bar">
     <button class="tab-btn active" onclick="switchTab('sessions')">Sessions</button>
     <button class="tab-btn" onclick="switchTab('portmap')">Port Map</button>
@@ -759,9 +794,26 @@
     }
 
     // ============================================================
+    // SYSTEM BAR (sticky strip above tab bar)
+    // ============================================================
+    function updateSystemBar(system, sessions, resourceHogs) {
+      if (system) {
+        var ramPct = system.totalRamGB > 0
+          ? Math.round((system.usedRamGB / system.totalRamGB) * 100) : 0;
+        var ramEl = document.getElementById('sb-ram');
+        ramEl.textContent = ramPct + '%';
+        ramEl.style.color = ramPct >= 85 ? 'var(--red)' : (ramPct >= 70 ? 'var(--amber)' : 'var(--text)');
+        document.getElementById('sb-cpu').textContent = system.cpuLoadPercent + '%';
+      }
+      var sessionCount = (sessions || []).length + (resourceHogs || []).length;
+      document.getElementById('sb-sessions').textContent = sessionCount;
+    }
+
+    // ============================================================
     // SYSTEM HEALTH STRIP
     // ============================================================
     function updateHealthStrip(system, sessions, resourceHogs) {
+      updateSystemBar(system, sessions, resourceHogs);
       var hogCount = (resourceHogs || []).length;
       var sessionCount = sessions.length + hogCount;
       var ramPct = Math.round((system.usedRamGB / system.totalRamGB) * 100);
@@ -1640,6 +1692,10 @@
     function renderPortMap(data) {
       lastPortMapData = data;
       renderGroupPills();
+      document.getElementById('sb-ports').textContent = data.summary.totalPorts;
+      var rogueEl = document.getElementById('sb-rogues');
+      rogueEl.textContent = data.summary.rogueCount;
+      rogueEl.style.color = data.summary.rogueCount > 10 ? 'var(--red)' : (data.summary.rogueCount > 3 ? 'var(--amber)' : 'var(--text)');
       var projects = data.projects;
       var rogues = data.rogues;
       var summary = data.summary;
