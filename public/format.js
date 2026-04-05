@@ -19,6 +19,7 @@
 
     if (days > 0) return hours > 0 ? days + 'd ' + hours + 'h' : days + 'd';
     if (hours > 0) return mins > 0 ? hours + 'h ' + mins + 'm' : hours + 'h';
+    // Show seconds only for short-lived processes (<10m). Beyond that, seconds are noise.
     if (mins > 0) return secs > 0 && mins < 10 ? mins + 'm ' + secs + 's' : mins + 'm';
     return secs + 's';
   }

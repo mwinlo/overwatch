@@ -13,6 +13,9 @@ describe('formatUptime', () => {
     assert.equal(formatUptime('05:23'), '5m 23s');
     assert.equal(formatUptime('00:45'), '45s');
     assert.equal(formatUptime('12:00'), '12m');
+    // Beyond 10 minutes we intentionally drop the seconds
+    assert.equal(formatUptime('10:45'), '10m');
+    assert.equal(formatUptime('15:30'), '15m');
   });
 
   it('formats HH:MM:SS as "Xh Ym"', () => {
