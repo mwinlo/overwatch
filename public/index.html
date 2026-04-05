@@ -147,6 +147,28 @@
     .sort-btn.kill-all.confirming { background: var(--kill-red); color: white; border-color: var(--kill-red); }
     .sort-bar-spacer { flex: 1; }
 
+    .filter-bar {
+      padding: 0 24px 12px;
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    }
+    .filter-input {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); border-radius: 6px;
+      padding: 6px 12px; font-family: var(--font-mono); font-size: 12px;
+      min-width: 240px; flex: 1; max-width: 420px;
+    }
+    .filter-input::placeholder { color: var(--text-secondary); }
+    .filter-input:focus { outline: none; border-color: rgba(255,255,255,0.2); }
+    .filter-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+    .filter-pill {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text-secondary); border-radius: 12px;
+      padding: 3px 10px; font-family: var(--font-mono);
+      font-size: 11px; cursor: pointer; transition: all 0.15s ease;
+    }
+    .filter-pill:hover { color: var(--text); }
+    .filter-pill.active { color: var(--text); background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.4); }
+
     /* Session Cards */
     .sessions-grid {
       display: grid; grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr));
@@ -682,6 +704,10 @@
       <button class="sort-btn" id="pm-running-only" onclick="toggleRunningOnly()">Running only</button>
       <button class="sort-btn" id="pm-toggle-rogues" onclick="toggleRogues()">Show system rogues</button>
       <button class="sort-btn kill-all" id="pm-kill-rogues" onclick="handleKillAllRogues(this)">Kill visible rogues</button>
+    </div>
+    <div class="filter-bar" id="pm-filter-bar">
+      <input type="text" id="pm-search" class="filter-input" placeholder="Filter by name or description…" oninput="handlePortMapSearch(this.value)">
+      <div class="filter-pills" id="pm-group-pills"></div>
     </div>
     <section class="portmap-grid" id="portmap-grid"></section>
     <div class="empty-state" id="portmap-empty" style="display:none">
@@ -1480,6 +1506,8 @@
     var lastPortMapData = null;
     var showAllRogues = false;
     var runningOnly = false;
+    var searchQuery = '';
+    var activeGroup = null;
 
     function isLowImpactRogue(r) {
       return (r.rssMB || 0) < 100 && (r.cpuPercent || 0) < 1;
@@ -1497,6 +1525,37 @@
       document.getElementById('pm-running-only').classList.toggle('active', runningOnly);
       lastPortMapStructure = '';
       if (lastPortMapData) renderPortMap(lastPortMapData);
+    }
+
+    function handlePortMapSearch(value) {
+      searchQuery = value.trim().toLowerCase();
+      lastPortMapStructure = '';
+      if (lastPortMapData) renderPortMap(lastPortMapData);
+    }
+
+    function setGroupFilter(group) {
+      activeGroup = activeGroup === group ? null : group;
+      renderGroupPills();
+      lastPortMapStructure = '';
+      if (lastPortMapData) renderPortMap(lastPortMapData);
+    }
+
+    function renderGroupPills() {
+      if (!lastPortMapData) return;
+      var groups = {};
+      Object.values(lastPortMapData.projects).forEach(function(p) {
+        if (p.group) groups[p.group] = (groups[p.group] || 0) + 1;
+      });
+      var container = document.getElementById('pm-group-pills');
+      if (!container) return;
+      container.textContent = '';
+      Object.keys(groups).sort().forEach(function(g) {
+        var pill = document.createElement('button');
+        pill.className = 'filter-pill' + (activeGroup === g ? ' active' : '');
+        pill.textContent = g + ' (' + groups[g] + ')';
+        pill.addEventListener('click', function() { setGroupFilter(g); });
+        container.appendChild(pill);
+      });
     }
 
     var killAllRoguesConfirmTimer = null;
@@ -1563,7 +1622,13 @@
 
     function getPortMapStructure(data) {
       // Only track what requires a full rebuild: which projects exist, running state, rogue ports
-      var parts = [portMapSortMode, showAllRogues ? 'all' : 'impact', runningOnly ? 'run' : 'any'];
+      var parts = [
+        portMapSortMode,
+        showAllRogues ? 'all' : 'impact',
+        runningOnly ? 'run' : 'any',
+        'q:' + searchQuery,
+        'g:' + (activeGroup || ''),
+      ];
       Object.keys(data.projects).sort().forEach(function(name) {
         var p = data.projects[name];
         parts.push(name + ':' + p.port + ':' + p.running + ':' + p.pid);
@@ -1574,6 +1639,7 @@
 
     function renderPortMap(data) {
       lastPortMapData = data;
+      renderGroupPills();
       var projects = data.projects;
       var rogues = data.rogues;
       var summary = data.summary;
@@ -1606,6 +1672,11 @@
       names.forEach(function(name) {
         var p = projects[name];
         if (runningOnly && !p.running) return;
+        if (activeGroup && p.group !== activeGroup) return;
+        if (searchQuery) {
+          var hay = (name + ' ' + (p.description || '') + ' ' + (p.group || '')).toLowerCase();
+          if (hay.indexOf(searchQuery) === -1) return;
+        }
         items.push({
           kind: 'project',
           name: name,
@@ -1616,7 +1687,9 @@
         });
       });
       var hiddenRogues = 0;
+      var suppressRogues = searchQuery || activeGroup;
       (rogues || []).forEach(function(r) {
+        if (suppressRogues) return;
         if (!showAllRogues && isLowImpactRogue(r)) { hiddenRogues++; return; }
         items.push({
           kind: 'rogue',
