@@ -664,6 +664,7 @@
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="format.js"></script>
   <script>
     // ============================================================
     // STATE
@@ -1026,7 +1027,7 @@
           +   '<div class="metric metric-bar"><div class="mini-bar"><div class="mini-fill" style="width:' + memPct + '%;background:' + barColor(memPct) + '"></div></div></div>'
           +   '<div class="metric"><span class="metric-label">Threads</span><span class="metric-value">' + s.threadCount + '</span></div>'
           +   '<div class="metric"><span class="metric-label">Children</span><span class="metric-value">' + s.childCount + '</span></div>'
-          +   '<div class="metric"><span class="metric-label">Uptime</span><span class="metric-value">' + s.elapsed + '</span></div>'
+          +   '<div class="metric"><span class="metric-label">Uptime</span><span class="metric-value">' + formatUptime(s.elapsed) + '</span></div>'
           + '</div>'
           + '<div class="session-tokens">'
           +   'Tokens In: ' + formatTokens(s.tokens.input) + ' &nbsp; Out: ' + formatTokens(s.tokens.output)
@@ -1057,7 +1058,7 @@
             + '<div class="session-path">' + escapeHtml(e.workingDir) + '</div>'
             + '<div class="session-metrics">'
             +   '<div class="metric"><span class="metric-label">Last Memory</span><span class="metric-value">' + e.treeRssGB + ' GB</span></div>'
-            +   '<div class="metric"><span class="metric-label">Uptime was</span><span class="metric-value">' + escapeHtml(e.elapsed) + '</span></div>'
+            +   '<div class="metric"><span class="metric-label">Uptime was</span><span class="metric-value">' + escapeHtml(formatUptime(e.elapsed)) + '</span></div>'
             + '</div>'
             + '<div class="exited-time">Exited ' + agoText + '</div>'
             + '</div>';
@@ -1088,7 +1089,7 @@
             +   '<div class="metric"><span class="metric-label">Memory</span><span class="metric-value">' + h.rssGB + ' GB</span></div>'
             +   '<div class="metric"><span class="metric-label">CPU</span><span class="metric-value">' + h.cpuPercent + '%</span></div>'
             +   '<div class="metric metric-bar"><div class="mini-bar"><div class="mini-fill" style="width:' + memPct + '%;background:var(--amber)"></div></div></div>'
-            +   '<div class="metric"><span class="metric-label">Uptime</span><span class="metric-value">' + (h.elapsed || '\u2014') + '</span></div>'
+            +   '<div class="metric"><span class="metric-label">Uptime</span><span class="metric-value">' + formatUptime(h.elapsed) + '</span></div>'
             + '</div>'
             + '<button class="kill-btn' + (isConfirming ? ' confirming' : '') + '" onclick="handleHogKill(' + h.pid + ', this)">'
             +   (isConfirming ? 'Confirm Kill?' : 'Kill Process')
@@ -1251,7 +1252,7 @@
         // Metrics grid
         var metrics = document.createElement('div');
         metrics.className = 'port-metrics';
-        var pairs = [['Memory', p.treeRssMB + ' MB'], ['CPU', p.cpuPercent + '%'], ['PID', p.pid], ['Uptime', p.elapsed || '\u2014']];
+        var pairs = [['Memory', p.treeRssMB + ' MB'], ['CPU', p.cpuPercent + '%'], ['PID', p.pid], ['Uptime', formatUptime(p.elapsed)]];
         pairs.forEach(function(pair) {
           var m = document.createElement('div');
           m.className = 'metric';
@@ -1367,7 +1368,7 @@
 
       var metrics = document.createElement('div');
       metrics.className = 'port-metrics';
-      [['Memory', r.rssMB + ' MB'], ['CPU', r.cpuPercent + '%'], ['PID', r.pid || '?'], ['Uptime', r.elapsed || '?']].forEach(function(pair) {
+      [['Memory', r.rssMB + ' MB'], ['CPU', r.cpuPercent + '%'], ['PID', r.pid || '?'], ['Uptime', formatUptime(r.elapsed)]].forEach(function(pair) {
         var m = document.createElement('div');
         m.className = 'metric';
         var lbl = document.createElement('span');
