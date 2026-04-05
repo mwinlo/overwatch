@@ -1265,7 +1265,8 @@
         // Metrics grid
         var metrics = document.createElement('div');
         metrics.className = 'port-metrics';
-        var pairs = [['CPU', p.cpuPercent + '%'], ['PID', p.pid], ['Uptime', formatUptime(p.elapsed)]];
+        var pairs = [['PID', p.pid], ['Uptime', formatUptime(p.elapsed)]];
+        if (p.cpuPercent >= 0.5) pairs.unshift(['CPU', p.cpuPercent + '%']);
         pairs.forEach(function(pair) {
           var m = document.createElement('div');
           m.className = 'metric';
